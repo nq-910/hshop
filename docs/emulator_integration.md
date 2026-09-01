@@ -4,9 +4,33 @@
 
 | Emulator | Package Name | Format |
 | :--- | :--- | :--- |
+| **Azahar / AzaharPlus** | `org.azahar_emu.azahar`, `dev.twilitrealm.dusk` | `.zcci`, `.cci`, `.3ds`, `.cia` |
 | **Lime3DS** | `io.github.lime3ds.android` | `.cci`, `.3ds`, `.cxi`, `.cia` |
-| **Dusk (Azahar)** | `dev.twilitrealm.dusk` | `.cci`, `.3ds`, `.cia` |
 | **Citra** | `org.citra.citra_emu` | `.cci`, `.3ds`, `.cia` |
+
+---
+
+## Dual-Screen Display Lock & Presentation Dismissal
+
+On the **AYN Thor**, Display ID 4 (Bottom Touchscreen) is an Android `Presentation` display. Only **one application** can bind a `Presentation` dialog or window to Display 4 at any given time.
+
+Before launching an external emulator, `MainActivity` invokes `dismissBottomPresentation()` synchronously:
+```kotlin
+fun launchGame(file: File) {
+    // 1. Release Display 4 Presentation immediately
+    mainActivity?.dismissBottomPresentation()
+
+    // 2. Launch emulator intent with read permissions
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    val intent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, "application/octet-stream")
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    context.startActivity(intent)
+}
+```
+When returning from the emulator to hShop, `MainActivity.onResume()` automatically re-initializes and re-binds the bottom presentation.
 
 ---
 

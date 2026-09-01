@@ -18,5 +18,8 @@ Welcome to the technical documentation for **hShop Thor**. This directory contai
 4. [**Turnstile & Download Pipeline (`turnstile_and_downloads.md`)**](turnstile_and_downloads.md)  
    Documentation on the Cloudflare Turnstile automated solver, `core-scraper` multiplatform module, and `ThorDownloadManager` coroutine download state machine.
 
-5. [**Emulator Launching & FileProvider (`emulator_integration.md`)**](emulator_integration.md)  
-   Intent routing, URI permissions, and configuration for **Lime3DS**, **Citra**, and **Azahar**.
+5. [**Seekable .ZCCI Compression (`zcci_compression.md`)**](zcci_compression.md)  
+   Technical specification for the `Z3DS` seekable Zstandard format, binary seek table structure, and AzaharPlus compatibility.
+
+6. [**Emulator Launching & FileProvider (`emulator_integration.md`)**](emulator_integration.md)  
+   Intent routing, URI permissions, presentation lifecycle release, and configuration for **Azahar**, **Lime3DS**, and **Citra**.
