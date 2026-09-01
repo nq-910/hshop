@@ -32,7 +32,7 @@ Browse, download, decrypt, compress, and launch Nintendo 3DS titles directly fro
 Full hardware input support for the AYN Thor gamepad including D-Pad navigation, analog sticks, face buttons, shoulder triggers, and hotkeys.
 
 ### 🚀 Direct Emulator Launch & Seamless Handoff
-- Supports **Azahar / AzaharPlus**, **Lime3DS**, and **Citra**.
+- Supports **AzaharPlus**
 - Uses Android `FileProvider` with automatic `Presentation` display release, ensuring the secondary screen is cleanly handed over to the emulator during gameplay.
 
 ---
