@@ -13,8 +13,8 @@ android {
         applicationId = "me.erista.hshop.thor"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.0.1-beta"
+        versionCode = 2
+        versionName = "0.0.2-beta"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -67,6 +67,9 @@ dependencies {
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+
+    // Zstandard Compression (for .ZCCI / AzaharPlus support)
+    implementation("com.github.luben:zstd-jni:1.5.6-8@aar")
 
     // Tooling & Debug
     debugImplementation("androidx.compose.ui:ui-tooling")

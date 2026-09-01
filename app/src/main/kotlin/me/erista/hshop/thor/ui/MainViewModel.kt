@@ -1,8 +1,10 @@
 package me.erista.hshop.thor.ui
 
 import android.app.Application
+import android.os.Environment
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,9 +18,11 @@ import me.erista.hshop.thor.data.DownloadTask
 import me.erista.hshop.thor.data.SettingsRepository
 import me.erista.hshop.thor.download.AutoDownloadResolver
 import me.erista.hshop.thor.download.ThorDownloadManager
+import java.io.File
 
 enum class BottomTab {
     BROWSE,
+    LIBRARY,
     DOWNLOADS,
     SETTINGS
 }
@@ -31,6 +35,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val settings: StateFlow<AppSettings> = settingsRepo.settings
     val downloadTasks: StateFlow<List<DownloadTask>> = downloadManager.tasks
+
+    private val _localRoms = MutableStateFlow<List<me.erista.hshop.thor.data.LocalRomItem>>(emptyList())
+    val localRoms: StateFlow<List<me.erista.hshop.thor.data.LocalRomItem>> = _localRoms.asStateFlow()
+
+    private val _isScanningLocalRoms = MutableStateFlow(false)
+    val isScanningLocalRoms: StateFlow<Boolean> = _isScanningLocalRoms.asStateFlow()
 
     private val _selectedTab = MutableStateFlow(BottomTab.BROWSE)
     val selectedTab: StateFlow<BottomTab> = _selectedTab.asStateFlow()
@@ -82,6 +92,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         loadCategory(HShopCategory.GAMES)
         checkForAppUpdates(silent = true)
+        refreshLocalRoms()
     }
 
     fun checkForAppUpdates(silent: Boolean = false) {
@@ -103,12 +114,113 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _availableUpdate.value = null
     }
 
+    fun refreshLocalRoms() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isScanningLocalRoms.value = true
+            val currentSettings = settings.value
+            val scanDirectories = mutableListOf<File>()
+
+            // 1. Primary ROMs Download Path
+            val primaryDir = File(currentSettings.downloadPath)
+            if (primaryDir.exists() && primaryDir.isDirectory) scanDirectories.add(primaryDir)
+
+            // 2. Updates & DLC Path
+            val updateDir = File(currentSettings.updateDlcPath)
+            if (updateDir.exists() && updateDir.isDirectory) scanDirectories.add(updateDir)
+
+            // 3. Common Thor handheld ROM locations (/sdcard/ROMs/n3ds, /sdcard/ROMs/3DS)
+            val n3dsDir = File(Environment.getExternalStorageDirectory(), "ROMs/n3ds")
+            if (n3dsDir.exists() && n3dsDir.isDirectory && !scanDirectories.contains(n3dsDir)) {
+                scanDirectories.add(n3dsDir)
+            }
+
+            val items = mutableListOf<me.erista.hshop.thor.data.LocalRomItem>()
+
+            for (dir in scanDirectories) {
+                dir.walkTopDown().maxDepth(3).filter { it.isFile }.forEach { file ->
+                    val ext = file.extension.lowercase()
+                    val type = when (ext) {
+                        "cci" -> me.erista.hshop.thor.data.LocalFileType.CCI
+                        "zcci" -> me.erista.hshop.thor.data.LocalFileType.ZCCI
+                        "3ds" -> me.erista.hshop.thor.data.LocalFileType.THREE_DS
+                        "cia" -> me.erista.hshop.thor.data.LocalFileType.CIA
+                        else -> null
+                    }
+
+                    if (type != null) {
+                        val baseName = file.nameWithoutExtension
+                        val prodCodeMatch = Regex("\\[([A-Z0-9-]+)\\]").find(baseName)
+                        val prodCode = prodCodeMatch?.groupValues?.get(1) ?: ""
+                        val cleanName = baseName.replace(Regex("\\[[A-Z0-9-]+\\]"), "").trim()
+
+                        val isUpdateDlc = type == me.erista.hshop.thor.data.LocalFileType.CIA &&
+                                (file.absolutePath.contains("Updates_DLC", ignoreCase = true) ||
+                                        prodCode.startsWith("CTR-U-") ||
+                                        prodCode.startsWith("CTR-M-"))
+
+                        val sizeMb = file.length() / (1024f * 1024f)
+                        val sizeStr = if (sizeMb >= 1024f) String.format("%.2f GB", sizeMb / 1024f) else String.format("%.1f MB", sizeMb)
+
+                        items.add(
+                            me.erista.hshop.thor.data.LocalRomItem(
+                                file = file,
+                                name = cleanName.ifEmpty { file.name },
+                                productCode = prodCode,
+                                fileType = type,
+                                sizeBytes = file.length(),
+                                sizeString = sizeStr,
+                                lastModified = file.lastModified(),
+                                isDecrypted = type == me.erista.hshop.thor.data.LocalFileType.CCI || type == me.erista.hshop.thor.data.LocalFileType.THREE_DS || type == me.erista.hshop.thor.data.LocalFileType.ZCCI,
+                                isUpdateOrDlc = isUpdateDlc
+                            )
+                        )
+                    }
+                }
+            }
+
+            _localRoms.value = items.distinctBy { it.file.absolutePath }.sortedByDescending { it.lastModified }
+            _isScanningLocalRoms.value = false
+        }
+    }
+
+    fun selectLocalRom(item: me.erista.hshop.thor.data.LocalRomItem) {
+        val detail = HShopTitleDetail(
+            id = item.productCode.ifEmpty { item.file.name },
+            name = item.name,
+            categorySlug = if (item.isUpdateOrDlc) "updates" else "games",
+            subcategorySlug = "installed",
+            titleId = "N/A",
+            productCode = item.productCode,
+            version = "Installed",
+            sizeString = item.sizeString,
+            contentType = item.fileType.displayName,
+            addedDate = "Local Storage",
+            updatedDate = "N/A",
+            downloadCount = 0L,
+            description = "Stored at: ${item.file.absolutePath}",
+            artwork = me.erista.hshop.model.ArtworkInfo(
+                primaryCoverUrl = null,
+                highResCoverUrl = null,
+                fallbackUrls = emptyList()
+            )
+        )
+        _selectedTitleDetail.value = detail
+        _statusMessage.value = "Selected local file: ${item.file.name}"
+    }
+
     fun selectTab(tab: BottomTab) {
         _selectedTab.value = tab
+        if (tab == BottomTab.LIBRARY) {
+            refreshLocalRoms()
+        }
     }
 
     fun setDownloadPath(path: String) {
         settingsRepo.setDownloadPath(path)
+    }
+
+    fun setUpdateDlcPath(path: String) {
+        settingsRepo.setUpdateDlcPath(path)
     }
 
     fun setTheme(theme: AppTheme) {
@@ -121,6 +233,47 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setAutoConvertTo3ds(autoConvert: Boolean) {
         settingsRepo.setAutoConvertTo3ds(autoConvert)
+    }
+
+    fun setAutoCompressToZcci(autoCompress: Boolean) {
+        settingsRepo.setAutoCompressToZcci(autoCompress)
+    }
+
+    fun setAutoDownloadRelatedContent(autoDownload: Boolean) {
+        settingsRepo.setAutoDownloadRelatedContent(autoDownload)
+    }
+
+    fun compressCciFile(cciFile: File, productCode: String = "", titleName: String = "") {
+        viewModelScope.launch(Dispatchers.IO) {
+            _statusMessage.value = "Compressing ${cciFile.name} to .ZCCI..."
+            val outputZcci = File(cciFile.parentFile, cciFile.nameWithoutExtension + ".zcci")
+            val success = me.erista.hshop.thor.compressor.ZcciCompressor.compressCciToZcci(
+                inputFile = cciFile,
+                outputFile = outputZcci,
+                onProgress = { progress, msg ->
+                    _statusMessage.value = msg
+                }
+            )
+
+            if (success) {
+                _statusMessage.value = "Compressed to ${outputZcci.name}!"
+                refreshLocalRoms()
+            } else {
+                _statusMessage.value = "Compression failed for ${cciFile.name}"
+            }
+        }
+    }
+
+    fun deleteLocalRomFile(file: File) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val fileName = file.name
+            if (file.exists() && file.delete()) {
+                _statusMessage.value = "Deleted $fileName"
+                refreshLocalRoms()
+            } else {
+                _statusMessage.value = "Failed to delete $fileName"
+            }
+        }
     }
 
     fun onSearchQueryChanged(query: String) {
@@ -353,6 +506,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _statusMessage.value = "Verifying ${detail.name}..."
     }
 
+    fun requestRelatedDownload(rel: RelatedContentSummary) {
+        val relDetail = HShopTitleDetail(
+            id = rel.id,
+            name = rel.name,
+            categorySlug = if (rel.relationType.contains("Update", ignoreCase = true)) "updates" else "dlc",
+            subcategorySlug = "related",
+            titleId = rel.titleId,
+            productCode = rel.productCode,
+            version = rel.version,
+            sizeString = rel.sizeString,
+            contentType = rel.contentType,
+            addedDate = "N/A",
+            updatedDate = "N/A",
+            downloadCount = 0L,
+            description = "Related content: ${rel.relationType}"
+        )
+        requestDownload(relDetail)
+    }
+
     fun dismissTurnstileDialog() {
         _turnstileTarget.value = null
     }
@@ -360,15 +532,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun onDownloadUrlResolved(directUrl: String, customTarget: HShopTitleDetail? = null) {
         val target = customTarget ?: _turnstileTarget.value ?: return
         val currentSettings = settings.value
+
+        val isUpdateOrDlc = target.categorySlug.equals("updates", ignoreCase = true) ||
+                target.categorySlug.equals("dlc", ignoreCase = true) ||
+                target.productCode.startsWith("CTR-U-", ignoreCase = true) ||
+                target.productCode.startsWith("CTR-M-", ignoreCase = true) ||
+                target.description.contains("Related content", ignoreCase = true)
+
+        val targetDir = if (isUpdateOrDlc) currentSettings.updateDlcPath else currentSettings.downloadPath
+        val skipDecryption = isUpdateOrDlc // Updates and DLC are installed as .CIA in Azahar, no decryption needed
+
         downloadManager.enqueueDownload(
             id = target.id,
             titleName = target.name,
             productCode = target.productCode,
             downloadUrl = directUrl,
-            targetDirectory = currentSettings.downloadPath
+            targetDirectory = targetDir,
+            skipAutoConvert = skipDecryption
         )
         _turnstileTarget.value = null
-        _statusMessage.value = "Downloading ${target.name} to ${currentSettings.downloadPath}"
+        _statusMessage.value = "Downloading ${target.name} to $targetDir"
     }
 
     fun cancelDownload(id: String) {

@@ -198,9 +198,20 @@ class MainActivity : ComponentActivity() {
         bottomPresentation = null
     }
 
+    override fun onStop() {
+        super.onStop()
+        bottomPresentation?.dismiss()
+        bottomPresentation = null
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         displayManager.unregisterDisplayListener(displayListener)
+        bottomPresentation?.dismiss()
+        bottomPresentation = null
+    }
+
+    fun dismissBottomPresentation() {
         bottomPresentation?.dismiss()
         bottomPresentation = null
     }

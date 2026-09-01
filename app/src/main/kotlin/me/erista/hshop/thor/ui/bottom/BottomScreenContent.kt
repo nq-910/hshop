@@ -62,6 +62,7 @@ fun BottomScreenContent(
             ) {
                 when (selectedTab) {
                     BottomTab.BROWSE -> BrowseTabContent(viewModel = viewModel)
+                    BottomTab.LIBRARY -> me.erista.hshop.thor.ui.local.LocalLibraryScreenContent(viewModel = viewModel)
                     BottomTab.DOWNLOADS -> DownloadsScreenContent(viewModel = viewModel)
                     BottomTab.SETTINGS -> SettingsScreenContent(viewModel = viewModel)
                 }
@@ -78,6 +79,18 @@ fun BottomScreenContent(
                     onClick = { viewModel.selectTab(BottomTab.BROWSE) },
                     icon = { Icon(imageVector = Icons.Default.Explore, contentDescription = "Browse") },
                     label = { Text("Browse") },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                        selectedTextColor = MaterialTheme.colorScheme.primary,
+                        indicatorColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                )
+
+                NavigationBarItem(
+                    selected = selectedTab == BottomTab.LIBRARY,
+                    onClick = { viewModel.selectTab(BottomTab.LIBRARY) },
+                    icon = { Icon(imageVector = Icons.Default.FolderSpecial, contentDescription = "Library") },
+                    label = { Text("Library") },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.primary,
                         selectedTextColor = MaterialTheme.colorScheme.primary,

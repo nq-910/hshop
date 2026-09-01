@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import me.erista.hshop.model.HShopTitleDetail
+import me.erista.hshop.model.RelatedContentSummary
 import me.erista.hshop.thor.data.DownloadStatus
 import me.erista.hshop.thor.data.DownloadTask
 import me.erista.hshop.thor.data.SettingsRepository
@@ -65,8 +66,48 @@ fun TopScreenContent(
     val existingCci = remember(cleanTitle, downloadDir, downloadTasks) {
         cleanTitle?.let { File(downloadDir, "$it.cci").takeIf { f -> f.exists() && f.length() > 0 } }
     }
+    val existingZcci = remember(cleanTitle, downloadDir, downloadTasks) {
+        cleanTitle?.let { File(downloadDir, "$it.zcci").takeIf { f -> f.exists() && f.length() > 0 } }
+    }
+    val existing3ds = remember(cleanTitle, downloadDir, downloadTasks) {
+        cleanTitle?.let { File(downloadDir, "$it.3ds").takeIf { f -> f.exists() && f.length() > 0 } }
+    }
     val existingCia = remember(cleanTitle, downloadDir, downloadTasks) {
         cleanTitle?.let { File(downloadDir, "$it.cia").takeIf { f -> f.exists() && f.length() > 0 } }
+    }
+
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    val activeRomFile = existingZcci ?: existingCci ?: existing3ds ?: existingCia ?: currentTask?.convertedFilePath?.let { File(it).takeIf { f -> f.exists() } } ?: currentTask?.targetFilePath?.let { File(it).takeIf { f -> f.exists() } }
+
+    if (showDeleteConfirm && activeRomFile != null && selectedDetail != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete ROM File?", color = Color.White, fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "Are you sure you want to permanently delete \"${selectedDetail?.name}\"?\n\nFile: ${activeRomFile.name} (${String.format("%.1f MB", activeRomFile.length() / (1024f * 1024f))})",
+                    color = Color.LightGray
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteLocalRomFile(activeRomFile)
+                        showDeleteConfirm = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Cancel", color = Color.Gray)
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(16.dp)
+        )
     }
 
     Box(
@@ -105,9 +146,14 @@ fun TopScreenContent(
                     detail = detail,
                     currentTask = currentTask,
                     existingCci = existingCci,
+                    existingZcci = existingZcci,
+                    existing3ds = existing3ds,
                     existingCia = existingCia,
+                    activeRomFile = activeRomFile,
                     onDownloadClick = { viewModel.requestDownload(detail) },
+                    onDownloadRelatedClick = { rel -> viewModel.requestRelatedDownload(rel) },
                     onCancelClick = { currentTask?.let { viewModel.cancelDownload(it.id) } },
+                    onDeleteClick = { showDeleteConfirm = true },
                     onDecryptClick = {
                         if (existingCia != null) {
                             viewModel.decryptCiaFile(existingCia, detail.id, detail.name)
@@ -157,9 +203,14 @@ private fun DetailView(
     detail: HShopTitleDetail,
     currentTask: DownloadTask?,
     existingCci: java.io.File?,
+    existingZcci: java.io.File?,
+    existing3ds: java.io.File?,
     existingCia: java.io.File?,
+    activeRomFile: java.io.File?,
     onDownloadClick: () -> Unit,
+    onDownloadRelatedClick: (RelatedContentSummary) -> Unit,
     onCancelClick: () -> Unit,
+    onDeleteClick: () -> Unit,
     onDecryptClick: () -> Unit
 ) {
     Row(
@@ -251,17 +302,25 @@ private fun DetailView(
                             )
                             IconButton(
                                 onClick = onCancelClick,
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(20.dp)
                             ) {
-                                Icon(imageVector = Icons.Default.Cancel, contentDescription = "Cancel", tint = Color.Red)
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Cancel",
+                                    tint = Color.Red,
+                                    modifier = Modifier.size(16.dp)
+                                )
                             }
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         LinearProgressIndicator(
-                            progress = { if (currentTask.totalBytes > 0) currentTask.progress else 0f },
+                            progress = { currentTask.progress },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp)),
                             color = MaterialTheme.colorScheme.primary,
-                            trackColor = MaterialTheme.colorScheme.surface,
-                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))
+                            trackColor = Color.Black.copy(alpha = 0.4f)
                         )
                     }
                 }
@@ -277,54 +336,77 @@ private fun DetailView(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "Converting to .3DS...",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.secondary,
-                                fontWeight = FontWeight.Bold
-                            )
-                            CircularProgressIndicator(
-                                color = MaterialTheme.colorScheme.secondary,
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Processing: ${currentTask.progressPercent}%",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         LinearProgressIndicator(
                             progress = { currentTask.progress },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp)),
                             color = MaterialTheme.colorScheme.secondary,
-                            trackColor = MaterialTheme.colorScheme.surface,
-                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))
+                            trackColor = Color.Black.copy(alpha = 0.4f)
                         )
                     }
                 }
-            } else if ((currentTask != null && currentTask.status == DownloadStatus.COMPLETED) || existingCci != null || existingCia != null) {
-                val gamePath = existingCci?.absolutePath ?: currentTask?.convertedFilePath ?: existingCia?.absolutePath ?: currentTask?.targetFilePath ?: ""
+            } else if (activeRomFile != null) {
+                val isDecrypted = existingZcci != null || existingCci != null || existing3ds != null || (currentTask?.convertedFilePath != null && currentTask.status == DownloadStatus.COMPLETED)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Button(
-                        onClick = { me.erista.hshop.thor.util.GameLauncher.launchGame(context, gamePath) },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, tint = Color.Black)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Play Game", color = Color.Black, fontWeight = FontWeight.Bold)
-                    }
-
-                    if (existingCci == null && (existingCia != null || currentTask?.convertedFilePath == null)) {
+                    if (isDecrypted) {
+                        Button(
+                            onClick = { me.erista.hshop.thor.util.GameLauncher.launchGame(context, activeRomFile.absolutePath) },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, tint = Color.Black)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Play", color = Color.Black, fontWeight = FontWeight.Bold)
+                        }
+                    } else {
                         Button(
                             onClick = onDecryptClick,
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f)
                         ) {
                             Icon(imageVector = Icons.Default.LockOpen, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Decrypt .CCI", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                            Text("Decrypt", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                         }
+                    }
+
+                    IconButton(
+                        onClick = onDeleteClick,
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteOutline,
+                            contentDescription = "Delete ROM",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
                 }
             } else {
@@ -408,10 +490,16 @@ private fun DetailView(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Related Content (Updates & DLC)
-            if (detail.relatedContent.isNotEmpty()) {
+            // Related Content (Filtered: Updates & DLC only, excluding Demos)
+            val filteredRelated = detail.relatedContent.filter { rel ->
+                !rel.relationType.contains("Demo", ignoreCase = true) &&
+                        !rel.name.contains("Demo", ignoreCase = true) &&
+                        !rel.productCode.startsWith("CTR-T-", ignoreCase = true)
+            }
+
+            if (filteredRelated.isNotEmpty()) {
                 Text(
-                    text = "RELATED CONTENT (${detail.relatedContent.size})",
+                    text = "UPDATES & DLC (${filteredRelated.size})",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.secondary,
                     fontWeight = FontWeight.Bold
@@ -421,19 +509,31 @@ private fun DetailView(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    items(detail.relatedContent) { rel ->
+                    items(filteredRelated) { rel ->
                         Surface(
                             color = MaterialTheme.colorScheme.surfaceVariant,
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.width(220.dp)
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.width(240.dp)
                         ) {
                             Column(modifier = Modifier.padding(10.dp)) {
-                                Text(
-                                    text = rel.relationType.ifEmpty { "Related" },
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = rel.relationType.ifEmpty { "Update / DLC" },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = rel.sizeString,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.Gray
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = rel.name,
                                     style = MaterialTheme.typography.bodyMedium,
@@ -443,10 +543,22 @@ private fun DetailView(
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = "Size: ${rel.sizeString} • v${rel.version}",
+                                    text = "Version: v${rel.version} • ${rel.productCode}",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = Color.White.copy(alpha = 0.6f)
                                 )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Button(
+                                    onClick = { onDownloadRelatedClick(rel) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                    shape = RoundedCornerShape(6.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                    modifier = Modifier.fillMaxWidth().height(32.dp)
+                                ) {
+                                    Icon(imageVector = Icons.Default.Download, contentDescription = null, tint = Color.Black, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Download .CIA", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }

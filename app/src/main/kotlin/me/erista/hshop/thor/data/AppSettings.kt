@@ -29,10 +29,13 @@ enum class AppTheme(val displayName: String, val primaryColor: Color, val accent
 
 data class AppSettings(
     val downloadPath: String = File(Environment.getExternalStorageDirectory(), "ROMs/3DS").absolutePath,
+    val updateDlcPath: String = File(Environment.getExternalStorageDirectory(), "ROMs/3DS/Updates_DLC").absolutePath,
     val theme: AppTheme = AppTheme.THOR_AMOLED,
     val downloadOverWifiOnly: Boolean = false,
     val autoCreateFolders: Boolean = true,
     val autoRemoveDownloadedCia: Boolean = false,
     val autoConvertTo3ds: Boolean = true,
+    val autoCompressToZcci: Boolean = false,
+    val autoDownloadRelatedContent: Boolean = true,
     val allowedRegions: Set<String> = emptySet() // Empty means all regions enabled
 )

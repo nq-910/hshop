@@ -13,12 +13,14 @@ class SettingsRepository(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("hshop_thor_settings", Context.MODE_PRIVATE)
 
     private val defaultDownloadPath = File(Environment.getExternalStorageDirectory(), "ROMs/3DS").absolutePath
+    private val defaultUpdateDlcPath = File(Environment.getExternalStorageDirectory(), "ROMs/3DS/Updates_DLC").absolutePath
 
     private val _settings = MutableStateFlow(loadSettings())
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
 
     private fun loadSettings(): AppSettings {
         val path = prefs.getString("download_path", defaultDownloadPath) ?: defaultDownloadPath
+        val updatePath = prefs.getString("update_dlc_path", defaultUpdateDlcPath) ?: defaultUpdateDlcPath
         val themeName = prefs.getString("app_theme", AppTheme.THOR_AMOLED.name) ?: AppTheme.THOR_AMOLED.name
         val theme = try {
             AppTheme.valueOf(themeName)
@@ -30,15 +32,20 @@ class SettingsRepository(context: Context) {
 
         val autoRemoveCia = prefs.getBoolean("auto_remove_cia", false)
         val autoConvert3ds = prefs.getBoolean("auto_convert_3ds", true)
+        val autoCompressZcci = prefs.getBoolean("auto_compress_zcci", false)
+        val autoDownloadRelated = prefs.getBoolean("auto_download_related", true)
         val regions = prefs.getStringSet("allowed_regions", emptySet()) ?: emptySet()
 
         return AppSettings(
             downloadPath = path,
+            updateDlcPath = updatePath,
             theme = theme,
             downloadOverWifiOnly = wifiOnly,
             autoCreateFolders = autoCreate,
             autoRemoveDownloadedCia = autoRemoveCia,
             autoConvertTo3ds = autoConvert3ds,
+            autoCompressToZcci = autoCompressZcci,
+            autoDownloadRelatedContent = autoDownloadRelated,
             allowedRegions = regions
         )
     }
@@ -47,6 +54,12 @@ class SettingsRepository(context: Context) {
         val cleanPath = path.trim()
         prefs.edit().putString("download_path", cleanPath).apply()
         _settings.value = _settings.value.copy(downloadPath = cleanPath)
+    }
+
+    fun setUpdateDlcPath(path: String) {
+        val cleanPath = path.trim()
+        prefs.edit().putString("update_dlc_path", cleanPath).apply()
+        _settings.value = _settings.value.copy(updateDlcPath = cleanPath)
     }
 
     fun setTheme(theme: AppTheme) {
@@ -72,6 +85,16 @@ class SettingsRepository(context: Context) {
     fun setAutoConvertTo3ds(autoConvert: Boolean) {
         prefs.edit().putBoolean("auto_convert_3ds", autoConvert).apply()
         _settings.value = _settings.value.copy(autoConvertTo3ds = autoConvert)
+    }
+
+    fun setAutoCompressToZcci(autoCompress: Boolean) {
+        prefs.edit().putBoolean("auto_compress_zcci", autoCompress).apply()
+        _settings.value = _settings.value.copy(autoCompressToZcci = autoCompress)
+    }
+
+    fun setAutoDownloadRelatedContent(autoDownload: Boolean) {
+        prefs.edit().putBoolean("auto_download_related", autoDownload).apply()
+        _settings.value = _settings.value.copy(autoDownloadRelatedContent = autoDownload)
     }
 
     fun setAllowedRegions(regions: Set<String>) {

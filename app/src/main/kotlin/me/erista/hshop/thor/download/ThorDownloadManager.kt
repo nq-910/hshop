@@ -35,9 +35,10 @@ class ThorDownloadManager(private val context: Context) {
         titleName: String,
         productCode: String,
         downloadUrl: String,
-        targetDirectory: String
+        targetDirectory: String,
+        skipAutoConvert: Boolean = false
     ) {
-        android.util.Log.d("ThorDownloadManager", "enqueueDownload: title='$titleName', url='$downloadUrl', dir='$targetDirectory'")
+        android.util.Log.d("ThorDownloadManager", "enqueueDownload: title='$titleName', url='$downloadUrl', dir='$targetDirectory', skipConvert=$skipAutoConvert")
         val targetDir = File(targetDirectory)
         if (!targetDir.exists()) {
             val created = targetDir.mkdirs()
@@ -58,10 +59,10 @@ class ThorDownloadManager(private val context: Context) {
         )
 
         _tasks.value = _tasks.value.filter { it.id != id } + task
-        startDownload(task)
+        startDownload(task, skipAutoConvert)
     }
 
-    private fun startDownload(task: DownloadTask) {
+    private fun startDownload(task: DownloadTask, skipAutoConvert: Boolean = false) {
         val job = scope.launch {
             android.util.Log.d("ThorDownloadManager", "Starting download: ${task.downloadUrl} -> ${task.targetFilePath}")
             updateTask(task.id) { it.copy(status = DownloadStatus.CONNECTING) }
@@ -151,7 +152,7 @@ class ThorDownloadManager(private val context: Context) {
                 val settingsRepo = SettingsRepository(context)
                 val currentSettings = settingsRepo.settings.value
 
-                if (currentSettings.autoConvertTo3ds && file.name.endsWith(".cia", ignoreCase = true)) {
+                if (!skipAutoConvert && currentSettings.autoConvertTo3ds && file.name.endsWith(".cia", ignoreCase = true)) {
                     updateTask(task.id) {
                         it.copy(
                             status = DownloadStatus.CONVERTING,
@@ -178,10 +179,41 @@ class ThorDownloadManager(private val context: Context) {
                     )
 
                     if (converted) {
+                        var finalFilePath = outputCciFile.absolutePath
+
+                        if (currentSettings.autoCompressToZcci) {
+                            updateTask(task.id) {
+                                it.copy(
+                                    status = DownloadStatus.CONVERTING,
+                                    progress = 0f,
+                                    errorMessage = "Compressing to .ZCCI..."
+                                )
+                            }
+
+                            val outputZcciFile = File(outputCciFile.parentFile, outputCciFile.nameWithoutExtension + ".zcci")
+                            val compressed = me.erista.hshop.thor.compressor.ZcciCompressor.compressCciToZcci(
+                                inputFile = outputCciFile,
+                                outputFile = outputZcciFile,
+                                onProgress = { progress, msg ->
+                                    updateTask(task.id) {
+                                        it.copy(
+                                            progress = progress,
+                                            errorMessage = msg
+                                        )
+                                    }
+                                }
+                            )
+
+                            if (compressed) {
+                                finalFilePath = outputZcciFile.absolutePath
+                                outputCciFile.delete() // Remove uncompressed .cci to save storage
+                            }
+                        }
+
                         updateTask(task.id) {
                             it.copy(
                                 status = DownloadStatus.COMPLETED,
-                                convertedFilePath = outputCciFile.absolutePath,
+                                convertedFilePath = finalFilePath,
                                 progress = 1.0f,
                                 errorMessage = null
                             )

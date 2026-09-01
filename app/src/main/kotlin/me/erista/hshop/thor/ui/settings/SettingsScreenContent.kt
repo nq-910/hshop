@@ -43,10 +43,12 @@ fun SettingsScreenContent(
     val context = LocalContext.current
 
     var customPathInput by remember(settings.downloadPath) { mutableStateOf(settings.downloadPath) }
+    var customUpdatePathInput by remember(settings.updateDlcPath) { mutableStateOf(settings.updateDlcPath) }
     var pathSavedMessage by remember { mutableStateOf<String?>(null) }
     var showInAppFolderPicker by remember { mutableStateOf(false) }
+    var showUpdateFolderPicker by remember { mutableStateOf(false) }
 
-    // Native Android SAF Explorer Folder Picker Launcher
+    // Native Android SAF Explorer Folder Picker Launcher (Main ROMs)
     val systemFolderPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
@@ -62,7 +64,27 @@ fun SettingsScreenContent(
             val resolvedPath = StorageUtils.getAbsolutePathFromTreeUri(context, it)
             customPathInput = resolvedPath
             viewModel.setDownloadPath(resolvedPath)
-            pathSavedMessage = "Selected from System Explorer!"
+            pathSavedMessage = "Selected ROM Path: $resolvedPath"
+        }
+    }
+
+    // Native Android SAF Explorer Folder Picker Launcher (Updates & DLC)
+    val systemUpdateFolderPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        uri?.let {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    it,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            } catch (e: Exception) {
+                // Ignore if not supported
+            }
+            val resolvedPath = StorageUtils.getAbsolutePathFromTreeUri(context, it)
+            customUpdatePathInput = resolvedPath
+            viewModel.setUpdateDlcPath(resolvedPath)
+            pathSavedMessage = "Selected Updates/DLC Path: $resolvedPath"
         }
     }
 
@@ -217,6 +239,90 @@ fun SettingsScreenContent(
                     HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                     Spacer(modifier = Modifier.height(12.dp))
 
+                    // Updates & DLC Target Directory
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Extension,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Updates & DLC Directory",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Folder where raw .CIA updates and DLCs are saved (ready for Azahar / Citra / Lime3DS install without decryption).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedTextField(
+                        value = customUpdatePathInput,
+                        onValueChange = { customUpdatePathInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.secondary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        ),
+                        trailingIcon = {
+                            IconButton(onClick = {
+                                viewModel.setUpdateDlcPath(customUpdatePathInput)
+                                pathSavedMessage = "Saved Updates/DLC path!"
+                            }) {
+                                Icon(
+                                    imageVector = Icons.Default.Save,
+                                    contentDescription = "Save Path",
+                                    tint = MaterialTheme.colorScheme.secondary
+                                )
+                            }
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { systemUpdateFolderPickerLauncher.launch(null) },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(imageVector = Icons.Default.FolderOpen, contentDescription = null, tint = Color.Black)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("System Explorer", color = Color.Black, fontWeight = FontWeight.Bold)
+                        }
+
+                        OutlinedButton(
+                            onClick = { showUpdateFolderPicker = true },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(imageVector = Icons.Default.Search, contentDescription = null, tint = Color.White)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Folder Browser", color = Color.White)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    Spacer(modifier = Modifier.height(12.dp))
+
                     // Auto-Convert .CIA to Decrypted .3DS Toggle
                     Row(
                         modifier = Modifier
@@ -252,6 +358,98 @@ fun SettingsScreenContent(
                         Switch(
                             checked = settings.autoConvertTo3ds,
                             onCheckedChange = { viewModel.setAutoConvertTo3ds(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = MaterialTheme.colorScheme.primary,
+                                checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                            )
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Auto-Compress to .ZCCI (AzaharPlus) Toggle
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.setAutoCompressToZcci(!settings.autoCompressToZcci) },
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Archive,
+                                    contentDescription = null,
+                                    tint = if (settings.autoCompressToZcci) MaterialTheme.colorScheme.primary else Color.Gray,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Auto-Compress to .ZCCI (AzaharPlus)",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Compresses decrypted cartridges into seekable .zcci format to save 40%-75% SD card space.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
+                        }
+
+                        Switch(
+                            checked = settings.autoCompressToZcci,
+                            onCheckedChange = { viewModel.setAutoCompressToZcci(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = MaterialTheme.colorScheme.primary,
+                                checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                            )
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Auto-Download Related Updates & DLC Toggle
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.setAutoDownloadRelatedContent(!settings.autoDownloadRelatedContent) },
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.SystemUpdate,
+                                    contentDescription = null,
+                                    tint = if (settings.autoDownloadRelatedContent) MaterialTheme.colorScheme.primary else Color.Gray,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Auto-Download Updates & DLC",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Automatically queues and downloads all available Updates and DLCs when downloading a base game.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
+                        }
+
+                        Switch(
+                            checked = settings.autoDownloadRelatedContent,
+                            onCheckedChange = { viewModel.setAutoDownloadRelatedContent(it) },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = MaterialTheme.colorScheme.primary,
                                 checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
@@ -702,7 +900,19 @@ fun SettingsScreenContent(
             onFolderSelected = { selectedPath ->
                 customPathInput = selectedPath
                 viewModel.setDownloadPath(selectedPath)
-                pathSavedMessage = "Selected: $selectedPath"
+                pathSavedMessage = "Selected ROM Path: $selectedPath"
+            }
+        )
+    }
+
+    if (showUpdateFolderPicker) {
+        FolderPickerDialog(
+            initialPath = settings.updateDlcPath,
+            onDismiss = { showUpdateFolderPicker = false },
+            onFolderSelected = { selectedPath ->
+                customUpdatePathInput = selectedPath
+                viewModel.setUpdateDlcPath(selectedPath)
+                pathSavedMessage = "Selected Updates/DLC Path: $selectedPath"
             }
         )
     }

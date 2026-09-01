@@ -265,7 +265,9 @@ class HShopScraper(
         defaultSubcategory: String = ""
     ): List<HShopTitleSummary> {
         val list = mutableListOf<HShopTitleSummary>()
-        val entries = doc.select(".elements > a.list-entry")
+        // Only select entries from the first .elements container (main list) to avoid duplicate "Top content"
+        val mainElementsContainer = doc.selectFirst(".elements") ?: doc
+        val entries = mainElementsContainer.select("a.list-entry")
 
         for (entry in entries) {
             val id = entry.attr("href").substringAfterLast("/")
