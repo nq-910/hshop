@@ -1,91 +1,126 @@
+<div align="center">
+
 # 🎮 hShop Thor
 
-**hShop Thor** is a specialized, dual-screen native Android client for browsing, downloading, decrypting, and launching Nintendo 3DS titles directly on the **AYN Thor** handheld gaming console.
+**A high-performance, dual-screen native Android client designed exclusively for the AYN Thor handheld console.**
+
+[![Release](https://img.shields.io/github/v/release/yggdrasil-seed/hshop?style=for-the-badge&color=2ecc71&logo=android)](https://github.com/yggdrasil-seed/hshop/releases)
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.0+-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org/)
+[![Platform](https://img.shields.io/badge/Target-AYN%20Thor-00E5FF?style=for-the-badge&logo=nintendo3ds&logoColor=white)](https://www.ayntec.com/)
+[![License](https://img.shields.io/badge/License-GPLv3%2FMIT-orange?style=for-the-badge)](LICENSE)
+
+<br/>
+
+Browse, download, decrypt, compress, and launch Nintendo 3DS titles directly from the cloud with zero hassle and seamless dual-screen presentation.
+
+</div>
 
 ---
 
-## ✨ Features
+## 🌟 Key Highlights
 
-- **Dual-Screen Architecture**:
-  - **Top Screen (Display 0 - 1920x1080 Landscape)**: High-resolution boxart hero view, game metadata, live download/decryption progress, one-tap **"Play Game"** launch actions, and direct **"Delete ROM"** management.
-  - **Bottom Screen (Display 4 - 1080x1240 Touchscreen)**: Interactive catalogue browsing with region filter chips, search bar, Local Library manager, download queue manager, and customizable settings.
-- **Seekable .ZCCI Compression (AzaharPlus / Z3DS format)**:
-  - High-speed native Zstandard compression (`com.github.luben:zstd-jni`) that converts `.cci` cartridges into seekable `.zcci` files.
-  - Reduces SD card storage footprint by 40%–75% while maintaining instant zero-lag random access for emulators.
-  - On-demand compression directly in the Library tab or fully automated upon download.
-- **Local ROM Library Manager**:
-  - Dedicated **Library** tab that scans your 3DS ROM directory for `.zcci`, `.cci`, `.3ds`, and `.cia` files.
-  - One-tap Play launch into **Azahar / Lime3DS / Citra**, on-demand `.zcci` compression, manual `.cia` decryption, and ROM deletion.
-- **Handheld Gamepad Navigation**:
-  - Full hardware mapping for **D-Pad**, **Analog Sticks**, **A/B/X/Y**, and **Shoulder Triggers (L1/R1/L2/R2)**.
-- **On-Device Hardware Decryption**:
-  - Bundled ARM64 native decryption engine (`libcia3ds.so`) with embedded `seeddb.bin`.
-  - Automatically converts encrypted `.cia` files into decrypted `.cci` / `.3ds` cartridge ROMs directly compatible with **Azahar**, **Lime3DS**, and **Citra**.
-  - Integrated **SeedFetcher** for on-the-fly Nintendo CDN seed retrieval for late-generation titles.
-- **Streamlined Cloudflare Verification**:
-  - Isolated, compact Turnstile verification widget that lets you complete security checks with a single tap.
-- **Direct Emulator Integration & Dual-Screen Handoff**:
-  - Integrated Android `FileProvider` to launch downloaded ROMs directly into installed emulators (`org.azahar_emu.azahar`, `io.github.lime3ds.android`, `org.citra.citra_emu`).
-  - Seamless Display 4 presentation dismissal before launching emulators so the emulator can take full control of both screens.
-- **Flexible Storage Management & Auto-Update**:
-  - Dedicated storage folders for base games (`/sdcard/ROMs/3DS`) and Updates/DLC (`/sdcard/ROMs/3DS/Updates_DLC`).
-  - Automatic GitHub update checker that alerts you when a new release is available.
+### 📱 Tailored Dual-Screen Architecture
+- **Top Display (1920×1080 Landscape AMOLED)**: Full-bleed hero art, technical metadata (Title ID, Product Code, SHA-256), live decryption speeds, one-tap emulator launch, and ROM file deletion.
+- **Bottom Touchscreen (1080×1240 Clamshell AMOLED)**: Fast catalogue browsing with category chips, region filters, local ROM management, download queues, and in-depth configuration.
+
+### ⚡ On-Device Decryption & Seekable .ZCCI Compression
+- **Hardware-Accelerated Decryption**: Bundled ARM64 `libcia3ds.so` with embedded `seeddb.bin` and dynamic Nintendo CDN seed retrieval (`SeedFetcher`). Converts encrypted `.cia` files into ready-to-play `.cci` / `.3ds` dumps.
+- **Native .ZCCI Compression (Z3DS)**: Frame-by-frame seekable Zstandard compression (`zstd-jni`). Saves **40%–75% SD card space** while preserving instantaneous random access for **AzaharPlus**.
+- **Auto-Pipeline**: Download `.cia` ➔ Decrypt to `.cci` ➔ Compress to `.zcci` ➔ Launch into emulator automatically.
+
+### 🕹️ Native Handheld Controller Integration
+Full hardware input support for the AYN Thor gamepad including D-Pad navigation, analog sticks, face buttons, shoulder triggers, and hotkeys.
+
+### 🚀 Direct Emulator Launch & Seamless Handoff
+- Supports **Azahar / AzaharPlus**, **Lime3DS**, and **Citra**.
+- Uses Android `FileProvider` with automatic `Presentation` display release, ensuring the secondary screen is cleanly handed over to the emulator during gameplay.
 
 ---
 
-## 🎮 Handheld Button Mapping
+## 🎮 Gamepad Controls
 
-| Button | Action | Description |
+| Button | Action | Function |
 | :--- | :--- | :--- |
-| **D-Pad Up / Down** (or **Left Stick**) | **Navigate Titles** | Scrolls catalogue and live-updates the top screen hero view. |
-| **D-Pad Left / Right** | **Switch Region** | Cycles region filters (USA, EUR, JPN, Australia, etc.). |
-| **L1 / R1** (or **L2 / R2**) | **Switch Category** | Cycles categories (Games, Updates, DLC, Virtual Console, DSiWare). |
-| **Button A** (or **Enter**) | **Download / Select** | Starts download or selects title. |
-| **Button B** (or **Back**) | **Back** | Closes overlays or returns to Browse tab. |
-| **Button X** | **Decrypt .CCI** | Manually runs native decryption on downloaded `.cia`. |
-| **Button Y** (or **Select**) | **Cycle Tabs** | Switches between Browse, Library, Downloads, and Settings tabs. |
+| **D-Pad Up / Down** (or **Left Stick**) | **Navigate** | Scroll through catalogue or local ROM list |
+| **D-Pad Left / Right** | **Region** | Switch region filters (USA, EUR, JPN, etc.) |
+| **L1 / R1** (or **L2 / R2**) | **Category** | Cycle categories (Games, Updates, DLC, VC, DSiWare) |
+| **Button A** (or **Enter**) | **Confirm** | Download title / select local item |
+| **Button B** (or **Back**) | **Back** | Dismiss overlays / return to Browse tab |
+| **Button X** | **Decrypt** | Manually decrypt selected `.cia` |
+| **Button Y** (or **Select**) | **Tabs** | Cycle tabs (`Browse` ➔ `Library` ➔ `Downloads` ➔ `Settings`) |
 
 ---
 
-## 🛠️ Building & Installing
+## 📥 Installation
 
-### Prerequisites
-- Android Studio / Android SDK (API 35, Min SDK 26)
-- Java 17 / Kotlin 2.0+
-- Connected **AYN Thor** via ADB
+Grab the latest pre-compiled APK from the [**GitHub Releases**](https://github.com/yggdrasil-seed/hshop/releases) page.
 
-### Build & Deploy Debug APK
 ```bash
-# Build and install directly onto connected AYN Thor
-./gradlew :app:installDebug
-
-# Launch the app
-adb shell am start -n me.erista.hshop.thor/.MainActivity
+# Install via ADB directly to your AYN Thor
+adb install -r hshop-thor-v0.0.2-beta.apk
 ```
 
 ---
 
-## 📂 Project Structure
+## 🛠️ Building from Source
+
+### Prerequisites
+- Android Studio Ladybug / Meerkat (or Android SDK 35)
+- JDK 17+
+- Kotlin 2.0+
+
+```bash
+# Clone the repository
+git clone https://github.com/yggdrasil-seed/hshop.git
+cd hshop
+
+# Build Release APK
+./gradlew :app:assembleRelease
+
+# Install directly on connected AYN Thor
+./gradlew :app:installRelease
+```
+
+---
+
+## 🏗️ Architecture & Modules
 
 ```
 hshop/
-├── app/
-│   ├── src/main/
-│   │   ├── assets/             # seeddb.bin & cdn-nintendo-leaf.pem
-│   │   ├── jniLibs/            # Native libcia3ds.so (arm64-v8a, armeabi-v7a, x86_64)
-│   │   └── kotlin/
-│   │       ├── io/github/cia3ds/   # JNI decryption bindings & SeedFetcher
-│   │       └── me/erista/hshop/thor/
-│   │           ├── converter/  # Conversion routines
-│   │           ├── data/       # AppSettings, DownloadModels & Repositories
-│   │           ├── download/   # ThorDownloadManager & Turnstile resolver
-│   │           ├── presentation/ # Dual-screen presentation controller
-│   │           ├── ui/         # Jetpack Compose UI (Top, Bottom, Settings, Downloads)
-│   │           └── util/       # GameLauncher & StorageUtils
-└── core-scraper/               # Multiplatform hShop HTML / REST Scraper
+├── app/                        # Main Android Application (Jetpack Compose)
+│   ├── src/main/assets/        # seeddb.bin & cdn-nintendo-leaf.pem
+│   ├── src/main/jniLibs/       # Native libcia3ds.so (ARM64, ARMv7, x86_64)
+│   └── src/main/kotlin/
+│       ├── io/github/cia3ds/   # JNI Decryption Bindings & SeedFetcher
+│       └── me/erista/hshop/thor/
+│           ├── compressor/     # Seekable Z3DS (.ZCCI) Stream Compressor
+│           ├── converter/      # CIA to CCI Decryption Pipeline
+│           ├── data/           # AppSettings, DownloadModels & Persistence
+│           ├── download/       # ThorDownloadManager & Turnstile Solver
+│           ├── presentation/   # Dual-Screen Presentation Controller
+│           ├── ui/             # Top/Bottom Split UI & Themes
+│           └── util/           # GameLauncher & SAF Storage Utilities
+│
+├── core-scraper/               # Multiplatform Scraper & Metadata Parser
+└── docs/                       # Architectural & Technical Specifications
 ```
 
 ---
 
-## 📄 License
-Open source and built for the handheld emulation community. Upstream decryption components derived from Project_CTR `ctrtool` and `makerom`.
+## 📚 Documentation
+
+Detailed subsystem specifications are available in the [`docs/`](docs/) directory:
+- [**Dual-Screen Architecture**](docs/dual_screen_architecture.md)
+- [**Decryption & Cryptography**](docs/decryption_and_cryptography.md)
+- [**Seekable .ZCCI Compression**](docs/zcci_compression.md)
+- [**Emulator Integration & FileProvider**](docs/emulator_integration.md)
+- [**Gamepad & Input Mapping**](docs/input_and_gamepad.md)
+- [**Turnstile & Download Pipeline**](docs/turnstile_and_downloads.md)
+
+---
+
+## 📄 License & Credits
+
+- Upstream decryption routines based on Project_CTR (`ctrtool`, `makerom`).
+- Seekable `.zcci` specification compatible with [AzaharPlus](https://github.com/AzaharPlus/AzaharPlus).
+- Built with ❤️ for the handheld emulation community.
