@@ -47,6 +47,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _subcategories = MutableStateFlow<List<HShopSubcategory>>(emptyList())
     val subcategories: StateFlow<List<HShopSubcategory>> = _subcategories.asStateFlow()
 
+    private val appUpdater = me.erista.hshop.thor.updater.AppUpdater(application)
+
+    private val _availableUpdate = MutableStateFlow<me.erista.hshop.thor.updater.AppUpdateInfo?>(null)
+    val availableUpdate: StateFlow<me.erista.hshop.thor.updater.AppUpdateInfo?> = _availableUpdate.asStateFlow()
+
     private val _titles = MutableStateFlow<List<HShopTitleSummary>>(emptyList())
     val titles: StateFlow<List<HShopTitleSummary>> = _titles.asStateFlow()
 
@@ -68,8 +73,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _statusMessage = MutableStateFlow("Ready")
     val statusMessage: StateFlow<String> = _statusMessage.asStateFlow()
 
+    private val _isCheckingUpdates = MutableStateFlow(false)
+    val isCheckingUpdates: StateFlow<Boolean> = _isCheckingUpdates.asStateFlow()
+
+    private val _updateCheckStatus = MutableStateFlow<String?>(null)
+    val updateCheckStatus: StateFlow<String?> = _updateCheckStatus.asStateFlow()
+
     init {
         loadCategory(HShopCategory.GAMES)
+        checkForAppUpdates(silent = true)
+    }
+
+    fun checkForAppUpdates(silent: Boolean = false) {
+        viewModelScope.launch {
+            _isCheckingUpdates.value = true
+            if (!silent) _updateCheckStatus.value = "Checking GitHub for updates..."
+            val update = appUpdater.checkForUpdates()
+            _isCheckingUpdates.value = false
+            if (update != null && update.hasUpdate) {
+                _availableUpdate.value = update
+                _updateCheckStatus.value = "New update available: v${update.latestVersion}"
+            } else if (!silent) {
+                _updateCheckStatus.value = "You are running the latest version (v0.0.1-beta)."
+            }
+        }
+    }
+
+    fun dismissUpdateDialog() {
+        _availableUpdate.value = null
     }
 
     fun selectTab(tab: BottomTab) {

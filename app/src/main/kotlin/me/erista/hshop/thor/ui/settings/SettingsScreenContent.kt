@@ -614,6 +614,85 @@ fun SettingsScreenContent(
                 }
             }
         }
+
+        // Section 5: App Version & Updates
+        item {
+            val isCheckingUpdates by viewModel.isCheckingUpdates.collectAsState()
+            val updateStatus by viewModel.updateCheckStatus.collectAsState()
+            val currentVersion = remember {
+                try {
+                    context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "0.0.1-beta"
+                } catch (e: Exception) {
+                    "0.0.1-beta"
+                }
+            }
+
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "App Version & Updates",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Current installed version: v$currentVersion",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+
+                    if (updateStatus != null) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = updateStatus!!,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Button(
+                        onClick = { viewModel.checkForAppUpdates(silent = false) },
+                        enabled = !isCheckingUpdates,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (isCheckingUpdates) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Checking...", color = Color.Gray)
+                        } else {
+                            Icon(imageVector = Icons.Default.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Check for Updates", color = Color.White)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     if (showInAppFolderPicker) {

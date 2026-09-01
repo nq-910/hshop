@@ -133,6 +133,15 @@ fun BottomScreenContent(
                 }
             )
         }
+
+        // App Update Notification Modal
+        val availableUpdate by viewModel.availableUpdate.collectAsState()
+        availableUpdate?.let { updateInfo ->
+            me.erista.hshop.thor.ui.updater.UpdateAvailableDialog(
+                updateInfo = updateInfo,
+                onDismiss = { viewModel.dismissUpdateDialog() }
+            )
+        }
     }
 }
 
