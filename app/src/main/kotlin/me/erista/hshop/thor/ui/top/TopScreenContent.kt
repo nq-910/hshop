@@ -27,13 +27,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import me.erista.hshop.model.HShopTitleDetail
 import me.erista.hshop.model.RelatedContentSummary
 import me.erista.hshop.thor.data.DownloadStatus
 import me.erista.hshop.thor.data.DownloadTask
 import me.erista.hshop.thor.data.SettingsRepository
 import me.erista.hshop.thor.ui.MainViewModel
-import me.erista.hshop.thor.ui.theme.*
+import me.erista.hshop.thor.ui.download.OutOfStorageDialog
+import me.erista.hshop.thor.ui.BottomTab
+import me.erista.hshop.thor.util.StorageUtils
+import android.os.Environment
 import java.io.File
 
 @Composable
@@ -45,6 +49,7 @@ fun TopScreenContent(
     val isLoading by viewModel.isLoading.collectAsState()
     val statusMsg by viewModel.statusMessage.collectAsState()
     val downloadTasks by viewModel.downloadTasks.collectAsState()
+    val outOfStorageTitleName by viewModel.outOfStorageTitleName.collectAsState()
 
     val currentTask = selectedDetail?.let { detail ->
         downloadTasks.find { it.id == detail.id }
@@ -110,12 +115,27 @@ fun TopScreenContent(
         )
     }
 
+    outOfStorageTitleName?.let { title ->
+        OutOfStorageDialog(
+            titleName = title,
+            onDismiss = { viewModel.dismissOutOfStorageDialog() }
+        )
+    }
+
+    val selectedTab by viewModel.selectedTab.collectAsState()
+
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        if (selectedDetail == null) {
+        if (selectedTab == BottomTab.SETTINGS) {
+            TopSettingsDashboard(
+                viewModel = viewModel,
+                settings = settings,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else if (selectedDetail == null) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -234,12 +254,25 @@ private fun DetailView(
                     .background(MaterialTheme.colorScheme.surface)
                     .border(1.dp, MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp))
             ) {
+                val context = LocalContext.current
+                val thumbUrl = detail.artwork?.thumbnailCoverUrl
+                    ?: detail.artwork?.primaryCoverUrl
                 val coverUrl = detail.artwork?.highResCoverUrl
                     ?: detail.artwork?.primaryCoverUrl
                     ?: detail.artwork?.fallbackUrls?.firstOrNull()
 
+                val imageRequest = remember(coverUrl, thumbUrl) {
+                    val builder = ImageRequest.Builder(context)
+                        .data(coverUrl)
+                        .crossfade(true)
+                    if (!thumbUrl.isNullOrBlank() && thumbUrl != coverUrl) {
+                        builder.placeholderMemoryCacheKey(thumbUrl)
+                    }
+                    builder.build()
+                }
+
                 AsyncImage(
-                    model = coverUrl,
+                    model = imageRequest,
                     contentDescription = detail.name,
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
@@ -597,6 +630,146 @@ private fun SpecCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+        }
+    }
+}
+
+@Composable
+private fun TopSettingsDashboard(
+    viewModel: MainViewModel,
+    settings: me.erista.hshop.thor.data.AppSettings,
+    modifier: Modifier = Modifier
+) {
+    val internalFree = remember { Environment.getDataDirectory().usableSpace }
+    val romDirFree = remember(settings.downloadPath) { StorageUtils.getUsableSpace(settings.downloadPath) }
+    val cacheSize = remember { viewModel.getAppCacheSizeBytes() }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(24.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Header Banner
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(20.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(36.dp)
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        Text(
+                            text = "Settings & System Overview",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Text(
+                            text = "AYN Thor Dual-Screen Handheld Console",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+
+            // Real-time Storage Overview Cards
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Internal Storage", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "${StorageUtils.formatSize(internalFree)} Free",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("ROM Storage", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "${StorageUtils.formatSize(romDirFree)} Free",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Cache Usage", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = StorageUtils.formatSize(cacheSize),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                }
+            }
+
+            // Quick Controller Guide Card
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(
+                        text = "Controller Navigation Guide",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "• [D-Pad / Left Stick] Navigate through titles, tabs, and filter options\n" +
+                               "• [A Button] Select title / Enter tab content / Start download\n" +
+                               "• [B Button] Return to bottom tab bar\n" +
+                               "• [X Button] Quick Decrypt (.cia) or Compress (.zcci) on Library item\n" +
+                               "• [L1 / R1] Cycle format filters (Library) or Categories (Browse)",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.LightGray,
+                        lineHeight = 22.sp
+                    )
+                }
+            }
         }
     }
 }

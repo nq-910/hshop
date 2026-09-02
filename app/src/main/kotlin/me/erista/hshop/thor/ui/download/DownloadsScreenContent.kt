@@ -1,6 +1,8 @@
 package me.erista.hshop.thor.ui.download
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -29,6 +31,7 @@ fun DownloadsScreenContent(
     modifier: Modifier = Modifier
 ) {
     val tasks by viewModel.downloadTasks.collectAsState()
+    val selectedDownloadTaskId by viewModel.selectedDownloadTaskId.collectAsState()
     val settings by viewModel.settings.collectAsState()
 
     Column(
@@ -100,15 +103,28 @@ fun DownloadsScreenContent(
                 }
             }
         } else {
+            val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+
+            androidx.compose.runtime.LaunchedEffect(selectedDownloadTaskId) {
+                val index = tasks.indexOfFirst { it.id == selectedDownloadTaskId }
+                if (index >= 0) {
+                    listState.animateScrollToItem(index)
+                }
+            }
+
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(tasks) { task ->
+                    val isSelected = task.id == selectedDownloadTaskId
                     DownloadTaskCard(
                         task = task,
+                        isSelected = isSelected,
+                        onClick = { viewModel.selectDownloadTaskId(task.id) },
                         onCancel = { viewModel.cancelDownload(task.id) },
                         onDecrypt = { viewModel.decryptExistingCia(task.id) }
                     )
@@ -121,13 +137,21 @@ fun DownloadsScreenContent(
 @Composable
 private fun DownloadTaskCard(
     task: DownloadTask,
+    isSelected: Boolean,
+    onClick: () -> Unit,
     onCancel: () -> Unit,
     onDecrypt: () -> Unit
 ) {
     Surface(
-        color = MaterialTheme.colorScheme.surface,
+        color = if (isSelected) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .then(
+                if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
+                else Modifier
+            )
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(

@@ -10,6 +10,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -42,11 +43,15 @@ fun SettingsScreenContent(
     val settings by viewModel.settings.collectAsState()
     val context = LocalContext.current
 
-    var customPathInput by remember(settings.downloadPath) { mutableStateOf(settings.downloadPath) }
-    var customUpdatePathInput by remember(settings.updateDlcPath) { mutableStateOf(settings.updateDlcPath) }
     var pathSavedMessage by remember { mutableStateOf<String?>(null) }
     var showInAppFolderPicker by remember { mutableStateOf(false) }
     var showUpdateFolderPicker by remember { mutableStateOf(false) }
+
+    var appCacheSize by remember { mutableStateOf(viewModel.getAppCacheSizeBytes()) }
+    val internalFree = remember { Environment.getDataDirectory().usableSpace }
+    val romDirFree = remember(settings.downloadPath) {
+        StorageUtils.getUsableSpace(settings.downloadPath)
+    }
 
     // Native Android SAF Explorer Folder Picker Launcher (Main ROMs)
     val systemFolderPickerLauncher = rememberLauncherForActivityResult(
@@ -62,7 +67,6 @@ fun SettingsScreenContent(
                 // Ignore if not supported
             }
             val resolvedPath = StorageUtils.getAbsolutePathFromTreeUri(context, it)
-            customPathInput = resolvedPath
             viewModel.setDownloadPath(resolvedPath)
             pathSavedMessage = "Selected ROM Path: $resolvedPath"
         }
@@ -82,13 +86,21 @@ fun SettingsScreenContent(
                 // Ignore if not supported
             }
             val resolvedPath = StorageUtils.getAbsolutePathFromTreeUri(context, it)
-            customUpdatePathInput = resolvedPath
             viewModel.setUpdateDlcPath(resolvedPath)
             pathSavedMessage = "Selected Updates/DLC Path: $resolvedPath"
         }
     }
 
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+
+    LaunchedEffect(Unit) {
+        viewModel.settingsScrollEvent.collect { delta ->
+            listState.animateScrollBy(delta)
+        }
+    }
+
     LazyColumn(
+        state = listState,
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
@@ -136,29 +148,41 @@ fun SettingsScreenContent(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // Current Selected Path Box
-                    OutlinedTextField(
-                        value = customPathInput,
-                        onValueChange = {
-                            customPathInput = it
-                            pathSavedMessage = null
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Storage Target Path") },
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    // Read-only current path display — tappable to open browser
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                         shape = RoundedCornerShape(10.dp),
-                        trailingIcon = {
-                            if (customPathInput != settings.downloadPath) {
-                                IconButton(onClick = {
-                                    viewModel.setDownloadPath(customPathInput)
-                                    pathSavedMessage = "Saved!"
-                                }) {
-                                    Icon(imageVector = Icons.Default.Save, contentDescription = "Save", tint = MaterialTheme.colorScheme.primary)
-                                }
-                            }
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showInAppFolderPicker = true }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Folder,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = settings.downloadPath,
+                                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                                color = Color.White,
+                                maxLines = 2,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = null,
+                                tint = Color.Gray,
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
-                    )
+                    }
 
                     if (pathSavedMessage != null) {
                         Spacer(modifier = Modifier.height(4.dp))
@@ -169,9 +193,9 @@ fun SettingsScreenContent(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
-                    // Explorer & Folder Picker Buttons
+                    // Picker Buttons
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -184,7 +208,7 @@ fun SettingsScreenContent(
                         ) {
                             Icon(imageVector = Icons.Default.FolderOpen, contentDescription = null, tint = Color.Black)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("System Explorer", color = Color.Black, fontWeight = FontWeight.Bold)
+                            Text("System Picker", color = Color.Black, fontWeight = FontWeight.Bold)
                         }
 
                         OutlinedButton(
@@ -192,9 +216,9 @@ fun SettingsScreenContent(
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Icon(imageVector = Icons.Default.Search, contentDescription = null, tint = Color.White)
+                            Icon(imageVector = Icons.Default.AccountTree, contentDescription = null, tint = Color.White)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Folder Browser", color = Color.White)
+                            Text("Browse", color = Color.White)
                         }
                     }
 
@@ -220,7 +244,6 @@ fun SettingsScreenContent(
                             FilterChip(
                                 selected = isSelected,
                                 onClick = {
-                                    customPathInput = path
                                     viewModel.setDownloadPath(path)
                                     pathSavedMessage = "Applied preset: $label"
                                 },
@@ -265,31 +288,41 @@ fun SettingsScreenContent(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    OutlinedTextField(
-                        value = customUpdatePathInput,
-                        onValueChange = { customUpdatePathInput = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
+                    // Read-only Updates/DLC path display
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                         shape = RoundedCornerShape(10.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.secondary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
-                        ),
-                        trailingIcon = {
-                            IconButton(onClick = {
-                                viewModel.setUpdateDlcPath(customUpdatePathInput)
-                                pathSavedMessage = "Saved Updates/DLC path!"
-                            }) {
-                                Icon(
-                                    imageVector = Icons.Default.Save,
-                                    contentDescription = "Save Path",
-                                    tint = MaterialTheme.colorScheme.secondary
-                                )
-                            }
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showUpdateFolderPicker = true }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Extension,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = settings.updateDlcPath,
+                                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                                color = Color.White,
+                                maxLines = 2,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = null,
+                                tint = Color.Gray,
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
-                    )
+                    }
 
                     Spacer(modifier = Modifier.height(10.dp))
 
@@ -305,7 +338,7 @@ fun SettingsScreenContent(
                         ) {
                             Icon(imageVector = Icons.Default.FolderOpen, contentDescription = null, tint = Color.Black)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("System Explorer", color = Color.Black, fontWeight = FontWeight.Bold)
+                            Text("System Picker", color = Color.Black, fontWeight = FontWeight.Bold)
                         }
 
                         OutlinedButton(
@@ -313,9 +346,9 @@ fun SettingsScreenContent(
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Icon(imageVector = Icons.Default.Search, contentDescription = null, tint = Color.White)
+                            Icon(imageVector = Icons.Default.AccountTree, contentDescription = null, tint = Color.White)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Folder Browser", color = Color.White)
+                            Text("Browse", color = Color.White)
                         }
                     }
 
@@ -500,6 +533,142 @@ fun SettingsScreenContent(
                                 checkedThumbColor = MaterialTheme.colorScheme.primary,
                                 checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
                             )
+                        )
+                    }
+                }
+            }
+        }
+
+        // Section: Storage & Cache Management
+        item {
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Storage,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "Storage & Cache Management",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "Monitor disk space and clear temporary extraction & artwork cache",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Storage Stats Grid
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        // Internal Free
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text(
+                                    text = "Internal Free",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.Gray
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = StorageUtils.formatSize(internalFree),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+
+                        // ROM Drive Free
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text(
+                                    text = "ROM Drive Free",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.Gray
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = StorageUtils.formatSize(romDirFree),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+
+                        // App Cache Usage
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text(
+                                    text = "App Cache",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.Gray
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = StorageUtils.formatSize(appCacheSize),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Clear Cache Action Button
+                    Button(
+                        onClick = {
+                            val freed = viewModel.clearAppCache()
+                            appCacheSize = viewModel.getAppCacheSizeBytes()
+                            pathSavedMessage = "Cache cleared! Freed ${StorageUtils.formatSize(freed)}"
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.primary
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteSweep,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Clear Temporary & Artwork Cache",
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
@@ -709,13 +878,13 @@ fun SettingsScreenContent(
 
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf(
-                            Triple("D-Pad Up / Down (or Left Stick)", "Navigate Titles", "Scrolls catalogue up/down"),
-                            Triple("D-Pad Left / Right", "Switch Region", "Cycles USA / EUR / JPN filters"),
-                            Triple("L1 / R1 (or L2 / R2)", "Switch Category", "Cycles Games, Updates, DLC, DSiWare"),
-                            Triple("Button A (or Enter)", "Download / Select", "Starts download of selected title"),
-                            Triple("Button B (or Back)", "Back", "Returns to Browse tab"),
+                            Triple("D-Pad Left / Right", "Navigate Tabs / Region", "Cycles bottom tabs when focused, or regions in Browse"),
+                            Triple("D-Pad Up / Down", "Navigate Content", "Scrolls catalogue titles or screen items"),
+                            Triple("Button A (or Enter)", "Select / Action", "Enters content from tab bar, or downloads selected title"),
+                            Triple("Button B (or Back)", "Back / Exit to Tabs", "Returns from content to tab bar, or back to Browse"),
+                            Triple("L1 / R1 (or L2 / R2)", "Switch Category", "Cycles Games, Updates, DLC, DSiWare in Browse"),
                             Triple("Button X", "Decrypt .CCI", "Converts .CIA to cartridge format"),
-                            Triple("Button Y (or Select)", "Switch Tabs", "Cycles Browse / Downloads / Settings")
+                            Triple("Button Y (or Select)", "Quick Cycle Tabs", "Instantly cycles through all bottom tabs")
                         ).forEach { (btn, action, desc) ->
                             Row(
                                 modifier = Modifier
@@ -898,7 +1067,6 @@ fun SettingsScreenContent(
             initialPath = settings.downloadPath,
             onDismiss = { showInAppFolderPicker = false },
             onFolderSelected = { selectedPath ->
-                customPathInput = selectedPath
                 viewModel.setDownloadPath(selectedPath)
                 pathSavedMessage = "Selected ROM Path: $selectedPath"
             }
@@ -910,7 +1078,6 @@ fun SettingsScreenContent(
             initialPath = settings.updateDlcPath,
             onDismiss = { showUpdateFolderPicker = false },
             onFolderSelected = { selectedPath ->
-                customUpdatePathInput = selectedPath
                 viewModel.setUpdateDlcPath(selectedPath)
                 pathSavedMessage = "Selected Updates/DLC Path: $selectedPath"
             }

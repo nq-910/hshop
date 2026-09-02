@@ -23,3 +23,7 @@ Welcome to the technical documentation for **hShop Thor**. This directory contai
 
 6. [**Emulator Launching & FileProvider (`emulator_integration.md`)**](emulator_integration.md)  
    Intent routing, URI permissions, presentation lifecycle release, and configuration for **Azahar**, **Lime3DS**, and **Citra**.
+
+7. [**Storage & Cache Architecture (`storage_and_cache.md`)**](storage_and_cache.md)  
+   Pre-flight storage checks, atomic staging with `.download` files, LRU and Coil cache policies, and cache clearing.
+

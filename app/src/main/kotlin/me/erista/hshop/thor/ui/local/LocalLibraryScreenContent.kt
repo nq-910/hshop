@@ -2,6 +2,7 @@ package me.erista.hshop.thor.ui.local
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -17,6 +18,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -33,11 +39,29 @@ fun LocalLibraryScreenContent(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+
     val localRoms by viewModel.localRoms.collectAsState()
+    val selectedLocalRom by viewModel.selectedLocalRom.collectAsState()
     val isScanning by viewModel.isScanningLocalRoms.collectAsState()
+    val isBottomBarFocused by viewModel.isBottomBarFocused.collectAsState()
+
+    LaunchedEffect(isBottomBarFocused) {
+        if (isBottomBarFocused) {
+            keyboardController?.hide()
+            focusManager.clearFocus()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.launchLocalRomEvent.collect { rom ->
+            GameLauncher.launchGame(context, rom.file.absolutePath)
+        }
+    }
 
     var searchQuery by remember { mutableStateOf("") }
-    var selectedFilter by remember { mutableStateOf("ALL") }
+    val selectedFilter by viewModel.selectedLocalFilter.collectAsState()
 
     val filteredRoms = remember(localRoms, searchQuery, selectedFilter) {
         localRoms.filter { item ->
@@ -48,6 +72,12 @@ fun LocalLibraryScreenContent(
 
             val matchesFilter = selectedFilter == "ALL" || item.fileType.name == selectedFilter
             matchesQuery && matchesFilter
+        }
+    }
+
+    LaunchedEffect(filteredRoms) {
+        if (selectedLocalRom != null && filteredRoms.none { it.file.absolutePath == selectedLocalRom?.file?.absolutePath }) {
+            filteredRoms.firstOrNull()?.let { viewModel.selectLocalRom(it) }
         }
     }
 
@@ -142,15 +172,24 @@ fun LocalLibraryScreenContent(
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text("Search local ROMs...", color = Color.Gray) },
             leadingIcon = {
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = null,
-                    tint = Color.Gray
-                )
+                IconButton(onClick = {
+                    keyboardController?.hide()
+                    focusManager.clearFocus()
+                }) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = null,
+                        tint = Color.Gray
+                    )
+                }
             },
             trailingIcon = {
                 if (searchQuery.isNotEmpty()) {
-                    IconButton(onClick = { searchQuery = "" }) {
+                    IconButton(onClick = {
+                        searchQuery = ""
+                        keyboardController?.hide()
+                        focusManager.clearFocus()
+                    }) {
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Clear",
@@ -168,6 +207,13 @@ fun LocalLibraryScreenContent(
                 unfocusedBorderColor = Color.Transparent,
                 focusedTextColor = Color.White,
                 unfocusedTextColor = Color.White
+            ),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(
+                onSearch = {
+                    keyboardController?.hide()
+                    focusManager.clearFocus()
+                }
             )
         )
 
@@ -184,7 +230,11 @@ fun LocalLibraryScreenContent(
                 Surface(
                     color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
                     shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.clickable { selectedFilter = filter }
+                    modifier = Modifier.clickable {
+                        keyboardController?.hide()
+                        focusManager.clearFocus()
+                        viewModel.selectLocalFilter(filter)
+                    }
                 ) {
                     Text(
                         text = filter,
@@ -229,16 +279,32 @@ fun LocalLibraryScreenContent(
                 }
             }
         } else {
+            val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+
+            LaunchedEffect(selectedLocalRom?.file?.absolutePath) {
+                val index = filteredRoms.indexOfFirst { it.file.absolutePath == selectedLocalRom?.file?.absolutePath }
+                if (index >= 0) {
+                    listState.animateScrollToItem(index)
+                }
+            }
+
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(filteredRoms, key = { it.file.absolutePath }) { rom ->
+                    val isSelected = rom.file.absolutePath == selectedLocalRom?.file?.absolutePath
                     LocalRomCard(
                         item = rom,
-                        onClick = { viewModel.selectLocalRom(rom) },
+                        isSelected = isSelected,
+                        onClick = {
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                            viewModel.selectLocalRom(rom)
+                        },
                         onPlayClick = { GameLauncher.launchGame(context, rom.file.absolutePath) },
                         onDecryptClick = { viewModel.decryptCiaFile(rom.file, rom.productCode, rom.name) },
                         onCompressClick = { viewModel.compressCciFile(rom.file, rom.productCode, rom.name) },
@@ -253,6 +319,7 @@ fun LocalLibraryScreenContent(
 @Composable
 private fun LocalRomCard(
     item: LocalRomItem,
+    isSelected: Boolean,
     onClick: () -> Unit,
     onPlayClick: () -> Unit,
     onDecryptClick: () -> Unit,
@@ -260,11 +327,15 @@ private fun LocalRomCard(
     onDeleteClick: () -> Unit
 ) {
     Surface(
-        color = MaterialTheme.colorScheme.surface,
+        color = if (isSelected) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(14.dp),
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
+            .then(
+                if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(14.dp))
+                else Modifier
+            )
     ) {
         Row(
             modifier = Modifier

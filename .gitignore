@@ -25,3 +25,4 @@ local.properties
 app/src/main/assets/seeds/
 *.bin.tmp
 *.log
+.vscode/

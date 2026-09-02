@@ -12,8 +12,15 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+
+/** Returns true if this IOException is caused by the disk being full (ENOSPC). */
+private fun IOException.isOutOfStorage(): Boolean {
+    val msg = message?.lowercase() ?: ""
+    return msg.contains("no space left") || msg.contains("enospc") || msg.contains("disk full")
+}
 
 class ThorDownloadManager(private val context: Context) {
 
@@ -68,6 +75,8 @@ class ThorDownloadManager(private val context: Context) {
             updateTask(task.id) { it.copy(status = DownloadStatus.CONNECTING) }
             val file = File(task.targetFilePath)
             file.parentFile?.mkdirs()
+            val tempFile = File("${task.targetFilePath}.download")
+            if (tempFile.exists()) tempFile.delete()
 
             try {
                 val request = Request.Builder()
@@ -93,6 +102,19 @@ class ThorDownloadManager(private val context: Context) {
                 }
 
                 val contentLength = body.contentLength()
+                val usable = file.parentFile?.usableSpace ?: 0L
+                val required = if (contentLength > 0) contentLength + (50L * 1024 * 1024) else (500L * 1024 * 1024)
+                if (usable in 1 until required) {
+                    tempFile.delete()
+                    updateTask(task.id) {
+                        it.copy(
+                            status = DownloadStatus.OUT_OF_STORAGE,
+                            errorMessage = "Not enough storage on target drive (${me.erista.hshop.thor.util.StorageUtils.formatSize(usable)} available, needs ${me.erista.hshop.thor.util.StorageUtils.formatSize(required)})."
+                        )
+                    }
+                    return@launch
+                }
+
                 updateTask(task.id) {
                     it.copy(
                         status = DownloadStatus.DOWNLOADING,
@@ -105,17 +127,32 @@ class ThorDownloadManager(private val context: Context) {
                 var lastBytes = 0L
 
                 body.byteStream().use { input ->
-                    FileOutputStream(file).use { output ->
+                    FileOutputStream(tempFile).use { output ->
                         val buffer = ByteArray(64 * 1024)
                         var read: Int
 
                         while (input.read(buffer).also { read = it } != -1) {
                             if (!isActive) {
+                                tempFile.delete()
                                 updateTask(task.id) { it.copy(status = DownloadStatus.CANCELLED) }
                                 return@launch
                             }
 
-                            output.write(buffer, 0, read)
+                            try {
+                                output.write(buffer, 0, read)
+                            } catch (e: IOException) {
+                                tempFile.delete()
+                                if (e.isOutOfStorage()) {
+                                    updateTask(task.id) {
+                                        it.copy(
+                                            status = DownloadStatus.OUT_OF_STORAGE,
+                                            errorMessage = "Not enough storage to download this title."
+                                        )
+                                    }
+                                    return@launch
+                                }
+                                throw e
+                            }
                             bytesRead += read
 
                             val currentTime = System.currentTimeMillis()
@@ -139,6 +176,10 @@ class ThorDownloadManager(private val context: Context) {
                         }
                     }
                 }
+
+                // Atomic promotion: replace target file with completed download file
+                if (file.exists()) file.delete()
+                tempFile.renameTo(file)
 
                 updateTask(task.id) {
                     it.copy(
@@ -239,8 +280,24 @@ class ThorDownloadManager(private val context: Context) {
                 }
 
             } catch (e: CancellationException) {
+                if (tempFile.exists()) tempFile.delete()
                 updateTask(task.id) { it.copy(status = DownloadStatus.CANCELLED) }
+            } catch (e: IOException) {
+                if (tempFile.exists()) tempFile.delete()
+                if (e.isOutOfStorage()) {
+                    updateTask(task.id) {
+                        it.copy(
+                            status = DownloadStatus.OUT_OF_STORAGE,
+                            errorMessage = "Not enough storage to decrypt this title."
+                        )
+                    }
+                } else {
+                    updateTask(task.id) {
+                        it.copy(status = DownloadStatus.FAILED, errorMessage = e.localizedMessage)
+                    }
+                }
             } catch (e: Exception) {
+                if (tempFile.exists()) tempFile.delete()
                 updateTask(task.id) {
                     it.copy(status = DownloadStatus.FAILED, errorMessage = e.localizedMessage)
                 }
@@ -329,6 +386,11 @@ class ThorDownloadManager(private val context: Context) {
     }
 
     fun cancelDownload(id: String) {
+        val task = _tasks.value.find { it.id == id }
+        if (task != null) {
+            val tempFile = File("${task.targetFilePath}.download")
+            if (tempFile.exists()) tempFile.delete()
+        }
         activeJobs[id]?.cancel()
         activeJobs.remove(id)
         updateTask(id) { it.copy(status = DownloadStatus.CANCELLED) }
@@ -344,5 +406,10 @@ class ThorDownloadManager(private val context: Context) {
         _tasks.value = _tasks.value.map {
             if (it.id == id) transform(it) else it
         }
+    }
+
+    /** Resets a task that hit OUT_OF_STORAGE back to FAILED so it can be retried or cleared. */
+    fun updateOutOfStorageTask(id: String) {
+        updateTask(id) { it.copy(status = DownloadStatus.FAILED, errorMessage = "Out of storage") }
     }
 }

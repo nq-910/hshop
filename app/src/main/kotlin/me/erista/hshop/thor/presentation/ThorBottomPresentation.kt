@@ -24,6 +24,9 @@ class ThorBottomPresentation(
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        setCancelable(false)
+        setCanceledOnTouchOutside(false)
+
         window?.decorView?.let { decor ->
             decor.setViewTreeLifecycleOwner(activity)
             decor.setViewTreeViewModelStoreOwner(activity)
@@ -41,5 +44,32 @@ class ThorBottomPresentation(
         }
 
         setContentView(composeView)
+    }
+
+    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
+    override fun onBackPressed() {
+        // Prevent dialog dismissal; route back action through ViewModel navigation or activity back press
+        if (!viewModel.handleButtonB()) {
+            activity.onBackPressedDispatcher.onBackPressed()
+        }
+    }
+
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean {
+        if (keyCode == android.view.KeyEvent.KEYCODE_BACK || keyCode == android.view.KeyEvent.KEYCODE_BUTTON_B) {
+            if (viewModel.handleButtonB()) {
+                return true
+            }
+        }
+        if (activity.onKeyDown(keyCode, event)) {
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onGenericMotionEvent(event: android.view.MotionEvent): Boolean {
+        if (activity.onGenericMotionEvent(event)) {
+            return true
+        }
+        return super.onGenericMotionEvent(event)
     }
 }

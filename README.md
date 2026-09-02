@@ -20,16 +20,28 @@ Browse, download, decrypt, compress, and launch Nintendo 3DS titles directly fro
 ## 🌟 Key Highlights
 
 ### 📱 Tailored Dual-Screen Architecture
-- **Top Display (1920×1080 Landscape AMOLED)**: Full-bleed hero art, technical metadata (Title ID, Product Code, SHA-256), live decryption speeds, one-tap emulator launch, and ROM file deletion.
+- **Top Display (1920×1080 Landscape AMOLED)**: Full-bleed hero art, technical metadata (Title ID, Product Code, SHA-256), live decryption speeds, one-tap emulator launch, and instant synchronised tab dashboards (including live storage/cache metrics).
 - **Bottom Touchscreen (1080×1240 Clamshell AMOLED)**: Fast catalogue browsing with category chips, region filters, local ROM management, download queues, and in-depth configuration.
+
+### 🕹️ Dual-Layer Handheld Controller Navigation
+- **Zero-Touch Operation**: Seamlessly move between the bottom tab bar and content areas without ever touching the screen.
+- **Tab-Aware Inputs**:
+  - **On Browse Tab**: Left/Right navigates region filters (`All Regions`, `Europe`, `North America`, etc.); L1/R1 cycles categories (`Games`, `Updates`, `DLC`, `DSiWare`, `Videos`, `Extras`).
+  - **On Library Tab**: Left/Right and L1/R1 cycles format filters (`ALL` ⟷ `CCI` ⟷ `ZCCI` ⟷ `3DS` ⟷ `CIA`).
+  - **On Tab Bar**: Up, Down, and Button A all immediately enter content. Left/Right cycles tabs.
+- **Auto-Dismissing Keyboard**: Software keyboard automatically collapses and clears focus on Search/Enter, search icon tap, filter chip selection, or item selection.
 
 ### ⚡ On-Device Decryption & Seekable .ZCCI Compression
 - **Hardware-Accelerated Decryption**: Bundled ARM64 `libcia3ds.so` with embedded `seeddb.bin` and dynamic Nintendo CDN seed retrieval (`SeedFetcher`). Converts encrypted `.cia` files into ready-to-play `.cci` / `.3ds` dumps.
 - **Native .ZCCI Compression (Z3DS)**: Frame-by-frame seekable Zstandard compression (`zstd-jni`). Saves **40%–75% SD card space** while preserving instantaneous random access for **AzaharPlus**.
 - **Auto-Pipeline**: Download `.cia` ➔ Decrypt to `.cci` ➔ Compress to `.zcci` ➔ Launch into emulator automatically.
 
-### 🕹️ Native Handheld Controller Integration
-Full hardware input support for the AYN Thor gamepad including D-Pad navigation, analog sticks, face buttons, shoulder triggers, and hotkeys.
+### 💾 Hardened Storage & High-Performance Caching
+- **Pre-Flight Storage Checks**: Drive space is validated before network downloads and before `.cci` decryptions to prevent out-of-storage crashes and half-written files.
+- **Atomic Staging**: Downloads stream to `.download` temporary files and are promoted to `.cia` only after 100% completion. Interrupted or cancelled tasks are cleanly removed.
+- **Symlink & Inode Deduplication**: Fully canonicalized scanning resolves Android FUSE casing variations (`Roms` vs `ROMs`) and symlinks (`/sdcard` vs `/storage/emulated/0`), guaranteeing unique titles.
+- **Predictive Artwork Pre-fetching & LRU Metadata**: Coil 256MB disk cache + bounded 300-entry LRU title cache ensures instantaneous (0ms) browsing and reloading with zero memory leaks.
+- **One-Tap Cache Wiping**: In-app Storage & Cache Management card in Settings displays live internal/ROM drive space and allows one-tap cache clearing.
 
 ### 🚀 Direct Emulator Launch & Seamless Handoff
 - Supports **AzaharPlus**
@@ -39,15 +51,24 @@ Full hardware input support for the AYN Thor gamepad including D-Pad navigation,
 
 ## 🎮 Gamepad Controls
 
-| Button | Action | Function |
+### Tab Bar Focused
+| Button / Input | Action | Function |
 | :--- | :--- | :--- |
-| **D-Pad Up / Down** (or **Left Stick**) | **Navigate** | Scroll through catalogue or local ROM list |
-| **D-Pad Left / Right** | **Region** | Switch region filters (USA, EUR, JPN, etc.) |
-| **L1 / R1** (or **L2 / R2**) | **Category** | Cycle categories (Games, Updates, DLC, VC, DSiWare) |
-| **Button A** (or **Enter**) | **Confirm** | Download title / select local item |
-| **Button B** (or **Back**) | **Back** | Dismiss overlays / return to Browse tab |
-| **Button X** | **Decrypt** | Manually decrypt selected `.cia` |
-| **Button Y** (or **Select**) | **Tabs** | Cycle tabs (`Browse` ➔ `Library` ➔ `Downloads` ➔ `Settings`) |
+| **D-Pad Left / Right** (or **Left Stick Left/Right**) | **Switch Tabs** | Cycle through `Browse` ⟷ `Library` ⟷ `Downloads` ⟷ `Settings` |
+| **Button A** / **D-Pad Up** / **D-Pad Down** | **Enter Content** | Jump directly into the active tab's list/controls |
+| **Button B** | **Back** | Clear active input or dismiss overlays |
+
+### Content Focused
+| Button / Input | Tab | Function |
+| :--- | :--- | :--- |
+| **D-Pad Up / Down** (or **Left Stick**) | *All Tabs* | Scroll through games, local ROMs, download tasks, or settings |
+| **D-Pad Left / Right** | **Browse** | Switch region filters (`All Regions`, `Europe`, `North America`, etc.) |
+| **D-Pad Left / Right** | **Library** | Cycle format filter chips (`ALL`, `CCI`, `ZCCI`, `3DS`, `CIA`) |
+| **L1 / R1** (or **L2 / R2**) | **Browse** | Cycle categories (`Games`, `Updates`, `DLC`, `DSiWare`, `Videos`, `Extras`) |
+| **L1 / R1** (or **L2 / R2**) | **Library** | Cycle format filter chips (`ALL`, `CCI`, `ZCCI`, `3DS`, `CIA`) |
+| **Button A** (or **Enter**) | *All Tabs* | Trigger primary action (Download / Launch Game / Decrypt) |
+| **Button B** | *All Tabs* | **Return to Tab Bar** (never closes app or dismisses presentations) |
+| **Button X** | **Library** | Quick-decrypt `.cia` to `.cci` or compress `.cci` to `.zcci` |
 
 ---
 
@@ -74,11 +95,12 @@ adb install -r hshop-thor-v0.0.2-beta.apk
 git clone https://github.com/nq-910/hshop.git
 cd hshop
 
-# Build Release APK
+# Build Debug or Release APK
+./gradlew :app:assembleDebug
 ./gradlew :app:assembleRelease
 
 # Install directly on connected AYN Thor
-./gradlew :app:installRelease
+./gradlew :app:installDebug
 ```
 
 ---
@@ -98,8 +120,8 @@ hshop/
 │           ├── data/           # AppSettings, DownloadModels & Persistence
 │           ├── download/       # ThorDownloadManager & Turnstile Solver
 │           ├── presentation/   # Dual-Screen Presentation Controller
-│           ├── ui/             # Top/Bottom Split UI & Themes
-│           └── util/           # GameLauncher & SAF Storage Utilities
+│           ├── ui/             # Top/Bottom Dual-Screen UI & ViewModels
+│           └── util/           # StorageUtils, GameLauncher & SAF Integrations
 │
 ├── core-scraper/               # Multiplatform Scraper & Metadata Parser
 └── docs/                       # Architectural & Technical Specifications
@@ -113,8 +135,9 @@ Detailed subsystem specifications are available in the [`docs/`](docs/) director
 - [**Dual-Screen Architecture**](docs/dual_screen_architecture.md)
 - [**Decryption & Cryptography**](docs/decryption_and_cryptography.md)
 - [**Seekable .ZCCI Compression**](docs/zcci_compression.md)
+- [**Storage & Cache Architecture**](docs/storage_and_cache.md)
+- [**Gamepad & Input Navigation**](docs/input_and_gamepad.md)
 - [**Emulator Integration & FileProvider**](docs/emulator_integration.md)
-- [**Gamepad & Input Mapping**](docs/input_and_gamepad.md)
 - [**Turnstile & Download Pipeline**](docs/turnstile_and_downloads.md)
 
 ---

@@ -8,7 +8,8 @@ enum class DownloadStatus {
     COMPLETED,
     PAUSED,
     FAILED,
-    CANCELLED
+    CANCELLED,
+    OUT_OF_STORAGE
 }
 
 data class DownloadTask(

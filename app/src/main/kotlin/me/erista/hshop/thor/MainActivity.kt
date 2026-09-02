@@ -91,9 +91,16 @@ class MainActivity : ComponentActivity() {
     private fun updatePresentations() {
         val secondaryDisplay = getSecondaryDisplay()
         if (secondaryDisplay != null) {
-            if (bottomPresentation == null || bottomPresentation?.display?.displayId != secondaryDisplay.displayId) {
-                bottomPresentation?.dismiss()
+            if (bottomPresentation == null || !bottomPresentation!!.isShowing || bottomPresentation?.display?.displayId != secondaryDisplay.displayId) {
+                try {
+                    bottomPresentation?.dismiss()
+                } catch (ignored: Exception) {}
                 bottomPresentation = ThorBottomPresentation(this, secondaryDisplay, viewModel).apply {
+                    setOnDismissListener {
+                        if (bottomPresentation === this) {
+                            bottomPresentation = null
+                        }
+                    }
                     show()
                 }
             }
@@ -104,44 +111,63 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean {
+        val isBarFocused = viewModel.isBottomBarFocused.value
+
         when (keyCode) {
             android.view.KeyEvent.KEYCODE_DPAD_UP -> {
-                viewModel.navigateTitleUp()
+                if (isBarFocused) {
+                    viewModel.enterContent()
+                } else {
+                    viewModel.navigateContentUp()
+                }
                 return true
             }
             android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
-                viewModel.navigateTitleDown()
+                if (isBarFocused) {
+                    viewModel.enterContent()
+                } else {
+                    viewModel.navigateContentDown()
+                }
                 return true
             }
             android.view.KeyEvent.KEYCODE_DPAD_LEFT -> {
-                viewModel.navigateSubcategoryPrev()
+                if (isBarFocused) {
+                    viewModel.navigateTabPrev()
+                } else {
+                    viewModel.navigateContentLeft()
+                }
                 return true
             }
             android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                viewModel.navigateSubcategoryNext()
+                if (isBarFocused) {
+                    viewModel.navigateTabNext()
+                } else {
+                    viewModel.navigateContentRight()
+                }
                 return true
             }
             android.view.KeyEvent.KEYCODE_BUTTON_L1,
             android.view.KeyEvent.KEYCODE_BUTTON_L2 -> {
-                viewModel.navigateCategoryPrev()
+                viewModel.navigateShoulderLeft()
                 return true
             }
             android.view.KeyEvent.KEYCODE_BUTTON_R1,
             android.view.KeyEvent.KEYCODE_BUTTON_R2 -> {
-                viewModel.navigateCategoryNext()
+                viewModel.navigateShoulderRight()
                 return true
             }
             android.view.KeyEvent.KEYCODE_BUTTON_A,
             android.view.KeyEvent.KEYCODE_ENTER,
             android.view.KeyEvent.KEYCODE_NUMPAD_ENTER,
             android.view.KeyEvent.KEYCODE_DPAD_CENTER -> {
-                viewModel.handleButtonA()
+                viewModel.handleContentAction()
                 return true
             }
             android.view.KeyEvent.KEYCODE_BUTTON_B,
             android.view.KeyEvent.KEYCODE_BACK -> {
-                viewModel.handleButtonB()
-                return true
+                if (viewModel.handleButtonB()) {
+                    return true
+                }
             }
             android.view.KeyEvent.KEYCODE_BUTTON_X -> {
                 viewModel.handleButtonX()
@@ -168,20 +194,36 @@ class MainActivity : ComponentActivity() {
             val y = event.getAxisValue(android.view.MotionEvent.AXIS_Y)
             val x = event.getAxisValue(android.view.MotionEvent.AXIS_X)
 
-            if (hatY < -0.5f || y < -0.5f) {
-                viewModel.navigateTitleUp()
-                return true
-            } else if (hatY > 0.5f || y > 0.5f) {
-                viewModel.navigateTitleDown()
-                return true
-            }
+            val isBarFocused = viewModel.isBottomBarFocused.value
 
-            if (hatX < -0.5f || x < -0.5f) {
-                viewModel.navigateSubcategoryPrev()
-                return true
-            } else if (hatX > 0.5f || x > 0.5f) {
-                viewModel.navigateSubcategoryNext()
-                return true
+            if (isBarFocused) {
+                if (hatX < -0.5f || x < -0.5f) {
+                    viewModel.navigateTabPrev()
+                    return true
+                } else if (hatX > 0.5f || x > 0.5f) {
+                    viewModel.navigateTabNext()
+                    return true
+                }
+                if (hatY < -0.5f || y < -0.5f || hatY > 0.5f || y > 0.5f) {
+                    viewModel.enterContent()
+                    return true
+                }
+            } else {
+                if (hatY < -0.5f || y < -0.5f) {
+                    viewModel.navigateContentUp()
+                    return true
+                } else if (hatY > 0.5f || y > 0.5f) {
+                    viewModel.navigateContentDown()
+                    return true
+                }
+
+                if (hatX < -0.5f || x < -0.5f) {
+                    if (isBarFocused) viewModel.navigateTabPrev() else viewModel.navigateContentLeft()
+                    return true
+                } else if (hatX > 0.5f || x > 0.5f) {
+                    if (isBarFocused) viewModel.navigateTabNext() else viewModel.navigateContentRight()
+                    return true
+                }
             }
         }
         return super.onGenericMotionEvent(event)

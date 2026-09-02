@@ -73,7 +73,32 @@ class Cia3ds(private val context: Context) {
 
         val seedDb = ensureSeedDb()
         val seedDbPath = if (seedDb.exists()) seedDb.absolutePath else ""
-        val tmpDir = File(context.cacheDir, "cia3ds-work").apply { mkdirs() }.absolutePath
+        val tmpWorkDir = File(context.cacheDir, "cia3ds-work")
+
+        // Pre-clean any stale work left by a previous crash before we start,
+        // so we never have two extractions' worth of data on disk at once.
+        if (tmpWorkDir.exists()) {
+            tmpWorkDir.deleteRecursively()
+            Log.d(TAG, "Pre-cleaned stale work dir: ${tmpWorkDir.absolutePath}")
+        }
+        tmpWorkDir.mkdirs()
+        val tmpDir = tmpWorkDir.absolutePath
+
+        // Pre-flight check: Internal cache storage for decryption scratch space
+        val cacheUsable = context.cacheDir.usableSpace
+        val estimatedCacheNeeded = ciaFile.length() + (30L * 1024 * 1024)
+        if (cacheUsable in 1 until estimatedCacheNeeded) {
+            Log.e(TAG, "Not enough internal cache storage for decryption: $cacheUsable bytes free, needs ~$estimatedCacheNeeded bytes")
+            throw java.io.IOException("Not enough internal storage for decryption cache (ENOSPC). ${me.erista.hshop.thor.util.StorageUtils.formatSize(cacheUsable)} free, needs ~${me.erista.hshop.thor.util.StorageUtils.formatSize(estimatedCacheNeeded)}.")
+        }
+
+        // Pre-flight check: Target drive storage for output .CCI
+        val targetUsable = outputCciFile.parentFile?.usableSpace ?: 0L
+        val estimatedOutputNeeded = (ciaFile.length() * 1.05).toLong() + (50L * 1024 * 1024)
+        if (targetUsable in 1 until estimatedOutputNeeded) {
+            Log.e(TAG, "Not enough target drive storage for output CCI: $targetUsable bytes free, needs ~$estimatedOutputNeeded bytes")
+            throw java.io.IOException("Not enough storage on target drive (ENOSPC). ${me.erista.hshop.thor.util.StorageUtils.formatSize(targetUsable)} free, needs ~${me.erista.hshop.thor.util.StorageUtils.formatSize(estimatedOutputNeeded)}.")
+        }
 
         var inPfd: ParcelFileDescriptor? = null
         var outPfd: ParcelFileDescriptor? = null
@@ -118,14 +143,22 @@ class Cia3ds(private val context: Context) {
             val success = result == 0 && outputCciFile.exists() && outputCciFile.length() > 0
             if (success && deleteSource) {
                 ciaFile.delete()
+            } else if (!success && outputCciFile.exists()) {
+                outputCciFile.delete() // Clean up partial/failed output file
             }
             success
         } catch (e: Exception) {
             Log.e(TAG, "Exception during nativeDecryptCia: ${e.localizedMessage}", e)
+            if (outputCciFile.exists()) {
+                outputCciFile.delete()
+            }
+            if (e is java.io.IOException) throw e
             false
         } finally {
             try { inPfd?.close() } catch (_: Exception) {}
             try { outPfd?.close() } catch (_: Exception) {}
+            // Clean up intermediate work files to free cache storage
+            tmpWorkDir.listFiles()?.forEach { it.deleteRecursively() }
         }
     }
 }

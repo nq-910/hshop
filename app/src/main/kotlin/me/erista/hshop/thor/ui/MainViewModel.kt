@@ -5,8 +5,11 @@ import android.os.Environment
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import me.erista.hshop.model.*
@@ -15,9 +18,13 @@ import me.erista.hshop.thor.data.AppSettings
 import me.erista.hshop.thor.data.AppTheme
 import me.erista.hshop.thor.data.DownloadStatus
 import me.erista.hshop.thor.data.DownloadTask
+import me.erista.hshop.thor.data.LocalFileType
+import me.erista.hshop.thor.data.LocalRomItem
 import me.erista.hshop.thor.data.SettingsRepository
 import me.erista.hshop.thor.download.AutoDownloadResolver
 import me.erista.hshop.thor.download.ThorDownloadManager
+import coil.imageLoader
+import coil.request.ImageRequest
 import java.io.File
 
 enum class BottomTab {
@@ -36,14 +43,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val settings: StateFlow<AppSettings> = settingsRepo.settings
     val downloadTasks: StateFlow<List<DownloadTask>> = downloadManager.tasks
 
-    private val _localRoms = MutableStateFlow<List<me.erista.hshop.thor.data.LocalRomItem>>(emptyList())
-    val localRoms: StateFlow<List<me.erista.hshop.thor.data.LocalRomItem>> = _localRoms.asStateFlow()
+    private val _localRoms = MutableStateFlow<List<LocalRomItem>>(emptyList())
+    val localRoms: StateFlow<List<LocalRomItem>> = _localRoms.asStateFlow()
+
+    private val _selectedLocalRom = MutableStateFlow<LocalRomItem?>(null)
+    val selectedLocalRom: StateFlow<LocalRomItem?> = _selectedLocalRom.asStateFlow()
+
+    private val _selectedLocalFilter = MutableStateFlow("ALL")
+    val selectedLocalFilter: StateFlow<String> = _selectedLocalFilter.asStateFlow()
+
+    private val _selectedDownloadTaskId = MutableStateFlow<String?>(null)
+    val selectedDownloadTaskId: StateFlow<String?> = _selectedDownloadTaskId.asStateFlow()
+
+    private val _settingsScrollEvent = MutableSharedFlow<Float>(extraBufferCapacity = 5)
+    val settingsScrollEvent: SharedFlow<Float> = _settingsScrollEvent.asSharedFlow()
+
+    private val _launchLocalRomEvent = MutableSharedFlow<LocalRomItem>(extraBufferCapacity = 1)
+    val launchLocalRomEvent: SharedFlow<LocalRomItem> = _launchLocalRomEvent.asSharedFlow()
 
     private val _isScanningLocalRoms = MutableStateFlow(false)
     val isScanningLocalRoms: StateFlow<Boolean> = _isScanningLocalRoms.asStateFlow()
 
     private val _selectedTab = MutableStateFlow(BottomTab.BROWSE)
     val selectedTab: StateFlow<BottomTab> = _selectedTab.asStateFlow()
+
+    // Focus state: true = Nav keys navigate Bottom Navigation tabs; false = Nav keys navigate screen content
+    private val _isBottomBarFocused = MutableStateFlow(true)
+    val isBottomBarFocused: StateFlow<Boolean> = _isBottomBarFocused.asStateFlow()
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -89,10 +115,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _updateCheckStatus = MutableStateFlow<String?>(null)
     val updateCheckStatus: StateFlow<String?> = _updateCheckStatus.asStateFlow()
 
+    // Non-null when a task just ran out of storage; holds the title name for the dialog.
+    private val _outOfStorageTitleName = MutableStateFlow<String?>(null)
+    val outOfStorageTitleName: StateFlow<String?> = _outOfStorageTitleName.asStateFlow()
+
     init {
         loadCategory(HShopCategory.GAMES)
         checkForAppUpdates(silent = true)
         refreshLocalRoms()
+        // Watch for out-of-storage failures and surface them to the UI.
+        viewModelScope.launch {
+            downloadTasks.collect { tasks ->
+                tasks.firstOrNull { it.status == DownloadStatus.OUT_OF_STORAGE }
+                    ?.let { task ->
+                        if (_outOfStorageTitleName.value == null) {
+                            _outOfStorageTitleName.value = task.titleName
+                        }
+                    }
+            }
+        }
     }
 
     fun checkForAppUpdates(silent: Boolean = false) {
@@ -104,8 +145,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (update != null && update.hasUpdate) {
                 _availableUpdate.value = update
                 _updateCheckStatus.value = "New update available: v${update.latestVersion}"
+            } else if (update != null) {
+                _updateCheckStatus.value = "You are running the latest version (v${update.currentVersion})."
             } else if (!silent) {
-                _updateCheckStatus.value = "You are running the latest version (v0.0.1-beta)."
+                _updateCheckStatus.value = "Could not check for updates. Check your connection."
             }
         }
     }
@@ -114,63 +157,101 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _availableUpdate.value = null
     }
 
+    fun dismissOutOfStorageDialog() {
+        // Also reset the task status back to FAILED so it doesn't re-trigger.
+        val titleName = _outOfStorageTitleName.value
+        _outOfStorageTitleName.value = null
+        if (titleName != null) {
+            // Clear the OUT_OF_STORAGE status from the task so it can be retried or removed.
+            val tasks = downloadTasks.value.toMutableList()
+            val idx = tasks.indexOfFirst {
+                it.titleName == titleName && it.status == DownloadStatus.OUT_OF_STORAGE
+            }
+            if (idx >= 0) {
+                tasks[idx] = tasks[idx].copy(status = DownloadStatus.FAILED)
+                downloadManager.updateOutOfStorageTask(tasks[idx].id)
+            }
+        }
+    }
+
     fun refreshLocalRoms() {
         viewModelScope.launch(Dispatchers.IO) {
             _isScanningLocalRoms.value = true
             val currentSettings = settings.value
-            val scanDirectories = mutableListOf<File>()
+            val candidateDirs = mutableListOf<File>()
 
             // 1. Primary ROMs Download Path
             val primaryDir = File(currentSettings.downloadPath)
-            if (primaryDir.exists() && primaryDir.isDirectory) scanDirectories.add(primaryDir)
+            if (primaryDir.exists() && primaryDir.isDirectory) candidateDirs.add(primaryDir)
 
             // 2. Updates & DLC Path
             val updateDir = File(currentSettings.updateDlcPath)
-            if (updateDir.exists() && updateDir.isDirectory) scanDirectories.add(updateDir)
+            if (updateDir.exists() && updateDir.isDirectory) candidateDirs.add(updateDir)
 
-            // 3. Common Thor handheld ROM locations (/sdcard/ROMs/n3ds, /sdcard/ROMs/3DS)
-            val n3dsDir = File(Environment.getExternalStorageDirectory(), "ROMs/n3ds")
-            if (n3dsDir.exists() && n3dsDir.isDirectory && !scanDirectories.contains(n3dsDir)) {
-                scanDirectories.add(n3dsDir)
+            // 3. Only check fallback paths if user has no directories configured or existing
+            if (candidateDirs.isEmpty()) {
+                val fallbacks = listOf(
+                    File(Environment.getExternalStorageDirectory(), "ROMs/n3ds"),
+                    File(Environment.getExternalStorageDirectory(), "Roms/n3ds"),
+                    File(Environment.getExternalStorageDirectory(), "ROMs/3DS"),
+                    File(Environment.getExternalStorageDirectory(), "Roms/3DS")
+                )
+                for (fb in fallbacks) {
+                    if (fb.exists() && fb.isDirectory) candidateDirs.add(fb)
+                }
             }
 
-            val items = mutableListOf<me.erista.hshop.thor.data.LocalRomItem>()
+            // 1. Resolve canonical directories and deduplicate case-insensitively (fixes Android FUSE /sdcard vs /storage/emulated/0 and ROMs vs Roms)
+            val canonicalDirs = candidateDirs
+                .map { try { it.canonicalFile } catch (_: Exception) { it.absoluteFile } }
+                .filter { it.exists() && it.isDirectory }
+                .distinctBy { it.canonicalPath.lowercase() }
+
+            // 2. Prune nested subdirectories (e.g. Updates_DLC inside ROMs/n3ds) to prevent walking the same tree twice
+            val scanDirectories = canonicalDirs.filter { child ->
+                canonicalDirs.none { parent ->
+                    parent != child && child.canonicalPath.lowercase().startsWith(parent.canonicalPath.lowercase() + File.separator)
+                }
+            }
+
+            val items = mutableListOf<LocalRomItem>()
 
             for (dir in scanDirectories) {
                 dir.walkTopDown().maxDepth(3).filter { it.isFile }.forEach { file ->
-                    val ext = file.extension.lowercase()
+                    val canonicalFile = try { file.canonicalFile } catch (_: Exception) { file.absoluteFile }
+                    val ext = canonicalFile.extension.lowercase()
                     val type = when (ext) {
-                        "cci" -> me.erista.hshop.thor.data.LocalFileType.CCI
-                        "zcci" -> me.erista.hshop.thor.data.LocalFileType.ZCCI
-                        "3ds" -> me.erista.hshop.thor.data.LocalFileType.THREE_DS
-                        "cia" -> me.erista.hshop.thor.data.LocalFileType.CIA
+                        "cci" -> LocalFileType.CCI
+                        "zcci" -> LocalFileType.ZCCI
+                        "3ds" -> LocalFileType.THREE_DS
+                        "cia" -> LocalFileType.CIA
                         else -> null
                     }
 
                     if (type != null) {
-                        val baseName = file.nameWithoutExtension
+                        val baseName = canonicalFile.nameWithoutExtension
                         val prodCodeMatch = Regex("\\[([A-Z0-9-]+)\\]").find(baseName)
                         val prodCode = prodCodeMatch?.groupValues?.get(1) ?: ""
                         val cleanName = baseName.replace(Regex("\\[[A-Z0-9-]+\\]"), "").trim()
 
-                        val isUpdateDlc = type == me.erista.hshop.thor.data.LocalFileType.CIA &&
-                                (file.absolutePath.contains("Updates_DLC", ignoreCase = true) ||
+                        val isUpdateDlc = type == LocalFileType.CIA &&
+                                (canonicalFile.absolutePath.contains("Updates_DLC", ignoreCase = true) ||
                                         prodCode.startsWith("CTR-U-") ||
                                         prodCode.startsWith("CTR-M-"))
 
-                        val sizeMb = file.length() / (1024f * 1024f)
+                        val sizeMb = canonicalFile.length() / (1024f * 1024f)
                         val sizeStr = if (sizeMb >= 1024f) String.format("%.2f GB", sizeMb / 1024f) else String.format("%.1f MB", sizeMb)
 
                         items.add(
-                            me.erista.hshop.thor.data.LocalRomItem(
-                                file = file,
-                                name = cleanName.ifEmpty { file.name },
+                            LocalRomItem(
+                                file = canonicalFile,
+                                name = cleanName.ifEmpty { canonicalFile.name },
                                 productCode = prodCode,
                                 fileType = type,
-                                sizeBytes = file.length(),
+                                sizeBytes = canonicalFile.length(),
                                 sizeString = sizeStr,
-                                lastModified = file.lastModified(),
-                                isDecrypted = type == me.erista.hshop.thor.data.LocalFileType.CCI || type == me.erista.hshop.thor.data.LocalFileType.THREE_DS || type == me.erista.hshop.thor.data.LocalFileType.ZCCI,
+                                lastModified = canonicalFile.lastModified(),
+                                isDecrypted = type == LocalFileType.CCI || type == LocalFileType.THREE_DS || type == LocalFileType.ZCCI,
                                 isUpdateOrDlc = isUpdateDlc
                             )
                         )
@@ -178,12 +259,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
-            _localRoms.value = items.distinctBy { it.file.absolutePath }.sortedByDescending { it.lastModified }
+            // Deduplicate by case-insensitive file name and size so physical duplicates never appear
+            val sorted = items.distinctBy { "${it.file.name.lowercase()}#${it.sizeBytes}" }.sortedByDescending { it.lastModified }
+            _localRoms.value = sorted
+            if (_selectedLocalRom.value == null && sorted.isNotEmpty()) {
+                selectLocalRom(sorted.first())
+            }
             _isScanningLocalRoms.value = false
         }
     }
 
-    fun selectLocalRom(item: me.erista.hshop.thor.data.LocalRomItem) {
+    fun selectLocalRom(item: LocalRomItem) {
+        _selectedLocalRom.value = item
         val detail = HShopTitleDetail(
             id = item.productCode.ifEmpty { item.file.name },
             name = item.name,
@@ -208,11 +295,60 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _statusMessage.value = "Selected local file: ${item.file.name}"
     }
 
+    private var _lastBrowseDetail: HShopTitleDetail? = null
+
     fun selectTab(tab: BottomTab) {
         _selectedTab.value = tab
-        if (tab == BottomTab.LIBRARY) {
-            refreshLocalRoms()
+        when (tab) {
+            BottomTab.BROWSE -> {
+                if (_lastBrowseDetail != null) {
+                    _selectedTitleDetail.value = _lastBrowseDetail
+                } else if (_titles.value.isNotEmpty()) {
+                    selectTitle(_titles.value.first())
+                }
+            }
+            BottomTab.LIBRARY -> {
+                val currentLocal = _selectedLocalRom.value ?: _localRoms.value.firstOrNull()
+                if (currentLocal != null) {
+                    selectLocalRom(currentLocal)
+                }
+                refreshLocalRoms()
+            }
+            BottomTab.DOWNLOADS -> {
+                val tasks = downloadTasks.value
+                val taskId = _selectedDownloadTaskId.value ?: tasks.firstOrNull()?.id
+                if (taskId != null) {
+                    selectDownloadTaskId(taskId)
+                }
+            }
+            BottomTab.SETTINGS -> {
+                // Top screen switches to Settings Dashboard instantly via selectedTab
+            }
         }
+    }
+
+    fun setBottomBarFocused(focused: Boolean) {
+        _isBottomBarFocused.value = focused
+    }
+
+    fun enterContent() {
+        _isBottomBarFocused.value = false
+    }
+
+    fun exitContentToBottomBar() {
+        _isBottomBarFocused.value = true
+    }
+
+    fun navigateTabNext() {
+        val tabs = BottomTab.entries
+        val nextIndex = (_selectedTab.value.ordinal + 1) % tabs.size
+        selectTab(tabs[nextIndex])
+    }
+
+    fun navigateTabPrev() {
+        val tabs = BottomTab.entries
+        val prevIndex = if (_selectedTab.value.ordinal <= 0) tabs.size - 1 else _selectedTab.value.ordinal - 1
+        selectTab(tabs[prevIndex])
     }
 
     fun setDownloadPath(path: String) {
@@ -337,6 +473,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 if (_titles.value.isNotEmpty()) {
+                    preloadInitialArtwork(_titles.value)
                     selectTitle(_titles.value.first())
                 }
             } catch (e: Exception) {
@@ -397,6 +534,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                 if (newTitles.isNotEmpty()) {
                     _titles.value = currentList + newTitles
+                    preloadInitialArtwork(newTitles)
                     _canLoadMore.value = newTitles.size >= 50
                     _statusMessage.value = "Loaded ${_titles.value.size} titles"
                 } else {
@@ -459,6 +597,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 if (_titles.value.isNotEmpty()) {
+                    preloadInitialArtwork(_titles.value)
                     selectTitle(_titles.value.first())
                 }
             } catch (e: Exception) {
@@ -474,29 +613,143 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         search()
     }
 
+    // Fast LRU in-memory cache (bounded to 300 entries) so navigating back and forth requires 0 network reloads without memory leak
+    private val titleDetailCache: MutableMap<String, HShopTitleDetail> = java.util.Collections.synchronizedMap(
+        object : java.util.LinkedHashMap<String, HShopTitleDetail>(128, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, HShopTitleDetail>?): Boolean {
+                return size > 300
+            }
+        }
+    )
+    private var loadTitleDetailJob: kotlinx.coroutines.Job? = null
+
     fun selectTitle(summary: HShopTitleSummary) {
-        viewModelScope.launch {
+        // 1. If already cached, restore instantly with ZERO reload or network delay
+        val cached = titleDetailCache[summary.id]
+        if (cached != null) {
+            loadTitleDetailJob?.cancel()
+            _selectedTitleDetail.value = cached
+            _lastBrowseDetail = cached
+            _statusMessage.value = "Selected ${cached.name}"
+            preloadUpcomingArtwork(summary)
+            return
+        }
+
+        // 2. Cancel previous in-flight detail loading job to avoid race conditions
+        loadTitleDetailJob?.cancel()
+
+        // Immediately present basic details and artwork to Top Screen
+        val initialDetail = HShopTitleDetail(
+            id = summary.id,
+            name = summary.name,
+            categorySlug = summary.categorySlug,
+            subcategorySlug = summary.subcategorySlug,
+            titleId = summary.titleId,
+            productCode = summary.productCode,
+            version = summary.version,
+            sizeString = summary.sizeString,
+            contentType = summary.contentType,
+            addedDate = "Loading...",
+            updatedDate = "Loading...",
+            downloadCount = 0L,
+            artwork = summary.artwork
+        )
+        _selectedTitleDetail.value = initialDetail
+        _lastBrowseDetail = initialDetail
+
+        // Pre-download upcoming title artwork and details ahead of the cursor
+        preloadUpcomingArtwork(summary)
+
+        loadTitleDetailJob = viewModelScope.launch {
             _statusMessage.value = "Loading ${summary.name}..."
             try {
                 val detail = scraper.fetchTitleDetail(summary.id)
+                titleDetailCache[summary.id] = detail
                 _selectedTitleDetail.value = detail
+                _lastBrowseDetail = detail
                 _statusMessage.value = "Loaded ${summary.name}"
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
-                _selectedTitleDetail.value = HShopTitleDetail(
-                    id = summary.id,
-                    name = summary.name,
-                    categorySlug = summary.categorySlug,
-                    subcategorySlug = summary.subcategorySlug,
-                    titleId = summary.titleId,
-                    productCode = summary.productCode,
-                    version = summary.version,
-                    sizeString = summary.sizeString,
-                    contentType = summary.contentType,
-                    addedDate = "N/A",
-                    updatedDate = "N/A",
-                    downloadCount = 0L,
-                    artwork = summary.artwork
+                // Keep the draft detail with artwork
+            }
+        }
+    }
+
+    private fun preloadInitialArtwork(titles: List<HShopTitleSummary>) {
+        if (titles.isEmpty()) return
+        val loader = getApplication<Application>().imageLoader
+        // Pre-download thumbnails for the first 12 titles and covers for the first 4
+        titles.take(12).forEachIndexed { index, item ->
+            val thumb = item.artwork?.thumbnailCoverUrl
+                ?: item.artwork?.primaryCoverUrl
+                ?: item.artwork?.fallbackUrls?.firstOrNull()
+            if (!thumb.isNullOrBlank()) {
+                loader.enqueue(
+                    ImageRequest.Builder(getApplication())
+                        .data(thumb)
+                        .build()
                 )
+            }
+            if (index < 4) {
+                val cover = item.artwork?.highResCoverUrl
+                    ?: item.artwork?.primaryCoverUrl
+                    ?: item.artwork?.fallbackUrls?.firstOrNull()
+                if (!cover.isNullOrBlank()) {
+                    loader.enqueue(
+                        ImageRequest.Builder(getApplication())
+                            .data(cover)
+                            .build()
+                    )
+                }
+            }
+        }
+    }
+
+    private fun preloadUpcomingArtwork(currentSummary: HShopTitleSummary) {
+        val list = _titles.value
+        if (list.isEmpty()) return
+        val currentIndex = list.indexOfFirst { it.id == currentSummary.id }
+        if (currentIndex < 0) return
+
+        val loader = getApplication<Application>().imageLoader
+        val maxIndex = (currentIndex + 6).coerceAtMost(list.size - 1)
+        for (i in (currentIndex + 1)..maxIndex) {
+            val item = list.getOrNull(i) ?: continue
+            val thumb = item.artwork?.thumbnailCoverUrl
+                ?: item.artwork?.primaryCoverUrl
+                ?: item.artwork?.fallbackUrls?.firstOrNull()
+            if (!thumb.isNullOrBlank()) {
+                loader.enqueue(
+                    ImageRequest.Builder(getApplication())
+                        .data(thumb)
+                        .build()
+                )
+            }
+            if (i <= currentIndex + 3) {
+                val cover = item.artwork?.highResCoverUrl
+                    ?: item.artwork?.primaryCoverUrl
+                    ?: item.artwork?.fallbackUrls?.firstOrNull()
+                if (!cover.isNullOrBlank()) {
+                    loader.enqueue(
+                        ImageRequest.Builder(getApplication())
+                            .data(cover)
+                            .build()
+                    )
+                }
+            }
+        }
+
+        // Prefetch details for the immediate next 2 titles so navigating forward is also instant
+        val nextItems = list.subList((currentIndex + 1).coerceAtMost(list.size), (currentIndex + 3).coerceAtMost(list.size))
+        for (nextItem in nextItems) {
+            if (!titleDetailCache.containsKey(nextItem.id)) {
+                viewModelScope.launch(Dispatchers.IO) {
+                    try {
+                        val d = scraper.fetchTitleDetail(nextItem.id)
+                        titleDetailCache[nextItem.id] = d
+                    } catch (ignored: Exception) {}
+                }
             }
         }
     }
@@ -623,6 +876,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun handleButtonA() {
+        if (_isBottomBarFocused.value) {
+            enterContent()
+            return
+        }
         val detail = _selectedTitleDetail.value
         if (detail != null) {
             val task = downloadTasks.value.find { it.id == detail.id }
@@ -634,10 +891,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun handleButtonB() {
+    fun handleButtonB(): Boolean {
+        if (!_isBottomBarFocused.value) {
+            exitContentToBottomBar()
+            return true
+        }
         if (_selectedTab.value != BottomTab.BROWSE) {
             selectTab(BottomTab.BROWSE)
+            return true
         }
+        return false
     }
 
     fun handleButtonY() {
@@ -646,7 +909,182 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         selectTab(tabs[nextIndex])
     }
 
+    fun navigateLocalRomDown() {
+        val list = _localRoms.value
+        if (list.isEmpty()) return
+        val current = _selectedLocalRom.value
+        val currentIndex = list.indexOfFirst { it.file.absolutePath == current?.file?.absolutePath }
+        val nextIndex = if (currentIndex < 0) 0 else (currentIndex + 1).coerceAtMost(list.size - 1)
+        selectLocalRom(list[nextIndex])
+    }
+
+    fun navigateLocalRomUp() {
+        val list = _localRoms.value
+        if (list.isEmpty()) return
+        val current = _selectedLocalRom.value
+        val currentIndex = list.indexOfFirst { it.file.absolutePath == current?.file?.absolutePath }
+        val prevIndex = if (currentIndex <= 0) 0 else currentIndex - 1
+        selectLocalRom(list[prevIndex])
+    }
+
+    fun syncDownloadTaskToTopScreen(taskId: String) {
+        val task = downloadTasks.value.find { it.id == taskId } ?: return
+        val sizeStr = me.erista.hshop.thor.util.StorageUtils.formatSize(task.totalBytes.takeIf { it > 0 } ?: (task.progress * 1000000000L).toLong())
+        val detail = HShopTitleDetail(
+            id = task.id,
+            name = task.titleName,
+            categorySlug = "downloads",
+            subcategorySlug = "queue",
+            titleId = "N/A",
+            productCode = task.productCode,
+            version = task.status.name,
+            sizeString = sizeStr,
+            contentType = "Download Task",
+            addedDate = "Queue",
+            updatedDate = "N/A",
+            downloadCount = 0L,
+            description = "Status: ${task.status.name} (${(task.progress * 100).toInt()}%)\nTarget: ${task.targetFilePath}",
+            artwork = me.erista.hshop.model.ArtworkInfo(
+                primaryCoverUrl = null,
+                highResCoverUrl = null,
+                fallbackUrls = emptyList()
+            )
+        )
+        _selectedTitleDetail.value = detail
+    }
+
+    fun selectDownloadTaskId(id: String) {
+        _selectedDownloadTaskId.value = id
+        syncDownloadTaskToTopScreen(id)
+    }
+
+    fun navigateDownloadTaskDown() {
+        val list = downloadTasks.value
+        if (list.isEmpty()) return
+        val currentId = _selectedDownloadTaskId.value
+        val currentIndex = list.indexOfFirst { it.id == currentId }
+        val nextIndex = if (currentIndex < 0) 0 else (currentIndex + 1).coerceAtMost(list.size - 1)
+        selectDownloadTaskId(list[nextIndex].id)
+    }
+
+    fun navigateDownloadTaskUp() {
+        val list = downloadTasks.value
+        if (list.isEmpty()) return
+        val currentId = _selectedDownloadTaskId.value
+        val currentIndex = list.indexOfFirst { it.id == currentId }
+        val prevIndex = if (currentIndex <= 0) 0 else currentIndex - 1
+        selectDownloadTaskId(list[prevIndex].id)
+    }
+
+    fun navigateContentUp() {
+        when (_selectedTab.value) {
+            BottomTab.BROWSE -> navigateTitleUp()
+            BottomTab.LIBRARY -> navigateLocalRomUp()
+            BottomTab.DOWNLOADS -> navigateDownloadTaskUp()
+            BottomTab.SETTINGS -> _settingsScrollEvent.tryEmit(-350f)
+        }
+    }
+
+    fun navigateContentDown() {
+        when (_selectedTab.value) {
+            BottomTab.BROWSE -> navigateTitleDown()
+            BottomTab.LIBRARY -> navigateLocalRomDown()
+            BottomTab.DOWNLOADS -> navigateDownloadTaskDown()
+            BottomTab.SETTINGS -> _settingsScrollEvent.tryEmit(350f)
+        }
+    }
+
+    fun selectLocalFilter(filter: String) {
+        _selectedLocalFilter.value = filter
+    }
+
+    fun navigateLocalFilterNext() {
+        val filters = listOf("ALL", "CCI", "ZCCI", "3DS", "CIA")
+        val currentIdx = filters.indexOf(_selectedLocalFilter.value)
+        val nextIdx = if (currentIdx < 0) 0 else (currentIdx + 1) % filters.size
+        _selectedLocalFilter.value = filters[nextIdx]
+    }
+
+    fun navigateLocalFilterPrev() {
+        val filters = listOf("ALL", "CCI", "ZCCI", "3DS", "CIA")
+        val currentIdx = filters.indexOf(_selectedLocalFilter.value)
+        val prevIdx = if (currentIdx <= 0) filters.size - 1 else currentIdx - 1
+        _selectedLocalFilter.value = filters[prevIdx]
+    }
+
+    fun navigateContentLeft() {
+        when (_selectedTab.value) {
+            BottomTab.BROWSE -> navigateSubcategoryPrev()
+            BottomTab.LIBRARY -> navigateLocalFilterPrev()
+            BottomTab.DOWNLOADS -> { /* no-op */ }
+            BottomTab.SETTINGS -> { /* no-op */ }
+        }
+    }
+
+    fun navigateContentRight() {
+        when (_selectedTab.value) {
+            BottomTab.BROWSE -> navigateSubcategoryNext()
+            BottomTab.LIBRARY -> navigateLocalFilterNext()
+            BottomTab.DOWNLOADS -> { /* no-op */ }
+            BottomTab.SETTINGS -> { /* no-op */ }
+        }
+    }
+
+    fun navigateShoulderLeft() {
+        when (_selectedTab.value) {
+            BottomTab.BROWSE -> navigateCategoryPrev()
+            BottomTab.LIBRARY -> navigateLocalFilterPrev()
+            BottomTab.DOWNLOADS -> { /* no-op */ }
+            BottomTab.SETTINGS -> { /* no-op */ }
+        }
+    }
+
+    fun navigateShoulderRight() {
+        when (_selectedTab.value) {
+            BottomTab.BROWSE -> navigateCategoryNext()
+            BottomTab.LIBRARY -> navigateLocalFilterNext()
+            BottomTab.DOWNLOADS -> { /* no-op */ }
+            BottomTab.SETTINGS -> { /* no-op */ }
+        }
+    }
+
+    fun handleContentAction() {
+        if (_isBottomBarFocused.value) {
+            enterContent()
+            return
+        }
+        when (_selectedTab.value) {
+            BottomTab.BROWSE -> handleButtonA()
+            BottomTab.LIBRARY -> {
+                _selectedLocalRom.value?.let { rom ->
+                    _launchLocalRomEvent.tryEmit(rom)
+                }
+            }
+            BottomTab.DOWNLOADS -> {
+                val taskId = _selectedDownloadTaskId.value
+                if (taskId != null) {
+                    val task = downloadTasks.value.find { it.id == taskId }
+                    if (task != null && task.status == DownloadStatus.COMPLETED) {
+                        decryptExistingCia(task.id)
+                    }
+                }
+            }
+            BottomTab.SETTINGS -> {
+                // In settings, content action
+            }
+        }
+    }
+
     fun handleButtonX() {
+        if (_selectedTab.value == BottomTab.LIBRARY) {
+            val rom = _selectedLocalRom.value ?: return
+            if (rom.fileType == LocalFileType.CIA) {
+                decryptCiaFile(rom.file, rom.productCode, rom.name)
+            } else if (rom.fileType == LocalFileType.CCI) {
+                compressCciFile(rom.file, rom.productCode, rom.name)
+            }
+            return
+        }
         val detail = _selectedTitleDetail.value ?: return
         val task = downloadTasks.value.find { it.id == detail.id }
         if (task != null) {
@@ -660,5 +1098,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearCompletedDownloads() {
         downloadManager.clearCompleted()
+    }
+
+    fun getAppCacheSizeBytes(): Long {
+        return me.erista.hshop.thor.util.StorageUtils.getDirSize(getApplication<Application>().cacheDir)
+    }
+
+    fun clearAppCache(): Long {
+        val app = getApplication<Application>()
+        val bytesFreed = me.erista.hshop.thor.util.StorageUtils.getDirSize(app.cacheDir)
+        me.erista.hshop.thor.util.StorageUtils.clearDirectory(app.cacheDir)
+        app.imageLoader.memoryCache?.clear()
+        titleDetailCache.clear()
+        _statusMessage.value = "Cache cleared (freed ${me.erista.hshop.thor.util.StorageUtils.formatSize(bytesFreed)})"
+        return bytesFreed
     }
 }

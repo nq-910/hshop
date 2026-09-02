@@ -124,3 +124,46 @@ adb shell ls -lh /sdcard/ROMs/3DS/
 # Clear app cache if scratchpad fills up
 adb shell pm clear me.erista.hshop.thor
 ```
+
+---
+
+## 7. Dual-Screen Presentation Focus & Back Button Handling
+
+### The Problem:
+`ThorBottomPresentation` inherits from Android's `Dialog` class. When a user tapped the bottom touchscreen, window focus shifted to the Presentation dialog. Subsequently pressing the device's physical **Back button** (`KEYCODE_BACK`) triggered `Dialog.onBackPressed()`, immediately dismissing the Presentation window and leaving the bottom screen blank.
+
+### The Fix in `ThorBottomPresentation.kt`:
+1. Mark dialog non-cancelable:
+   ```kotlin
+   setCancelable(false)
+   setCanceledOnTouchOutside(false)
+   ```
+2. Override `onBackPressed()` and `onKeyDown()` to forward navigation back to `viewModel.handleButtonB()` or the main activity dispatcher, preventing Android from destroying the Presentation dialog.
+3. Forward all `onGenericMotionEvent` and `onKeyDown` events to `MainActivity` so gamepad controls remain active even when the secondary touchscreen holds focus.
+
+---
+
+## 8. Android FUSE Casing & Symlink Deduplication
+
+### The Inode Alias Problem:
+On the AYN Thor, Android's user storage is mounted via FUSE (`sdcardfs` emulation) where `/sdcard` is a symlink to `/storage/emulated/0`. Furthermore, directory lookups can be case-insensitive:
+```bash
+ls -id /sdcard/ROMs/n3ds /storage/emulated/0/Roms/n3ds
+# Both return the exact same inode: 70731
+```
+Because standard Java `File.canonicalPath` and string equality do not normalize case differences (`ROMs` vs `Roms`), scanning both the user's selected path and hardcoded fallbacks resulted in every ROM file being indexed twice (e.g. 32 ROMs producing 64 titles in the library).
+
+### The Fix in `MainViewModel.kt`:
+1. Scan paths are canonicalized and deduplicated case-insensitively (`.canonicalPath.lowercase()`).
+2. Nested child directories (e.g. `Updates_DLC` inside the ROM root) are pruned before `.walkTopDown()` to prevent recursive duplication.
+3. Items are deduplicated by file name and byte length:
+   ```kotlin
+   items.distinctBy { "${it.file.name.lowercase()}#${it.sizeBytes}" }
+   ```
+
+---
+
+## 9. Atomic File Staging
+
+Never stream network downloads directly into target ROM filenames (`.cia` or `.cci`). Always stream into `${targetFilePath}.download` and rename atomically upon 100% completion. If interrupted, out-of-storage, or cancelled, delete the staging file immediately so corrupt or incomplete archives never linger on disk.
+

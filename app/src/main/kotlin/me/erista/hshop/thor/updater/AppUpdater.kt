@@ -25,7 +25,7 @@ data class AppUpdateInfo(
 
 class AppUpdater(
     private val context: Context,
-    private val repoOwner: String = "yggdrasil-seed",
+    private val repoOwner: String = "nq-910",
     private val repoName: String = "hshop"
 ) {
     private val client = OkHttpClient.Builder()

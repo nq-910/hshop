@@ -22,9 +22,13 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import me.erista.hshop.model.HShopCategory
 import me.erista.hshop.model.HShopTitleSummary
 import me.erista.hshop.thor.data.DownloadStatus
@@ -41,11 +45,22 @@ fun BottomScreenContent(
     modifier: Modifier = Modifier
 ) {
     val selectedTab by viewModel.selectedTab.collectAsState()
+    val isBottomBarFocused by viewModel.isBottomBarFocused.collectAsState()
     val downloadTasks by viewModel.downloadTasks.collectAsState()
     val turnstileTarget by viewModel.turnstileTarget.collectAsState()
 
     val activeDownloadsCount = downloadTasks.count {
         it.status == DownloadStatus.DOWNLOADING || it.status == DownloadStatus.CONNECTING || it.status == DownloadStatus.QUEUED
+    }
+
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+
+    LaunchedEffect(isBottomBarFocused) {
+        if (isBottomBarFocused) {
+            keyboardController?.hide()
+            focusManager.clearFocus()
+        }
     }
 
     Box(
@@ -68,45 +83,94 @@ fun BottomScreenContent(
                 }
             }
 
-            // Sleek, Low-Profile Bottom Navigation Bar
+            // Controller Navigation Hint Strip
+            Surface(
+                color = if (isBottomBarFocused) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color(0xFF090A0D),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(24.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (isBottomBarFocused) {
+                        Text(
+                            text = "◀  ▶  Tabs   •   [A / ▲ / ▼] Enter Content   •   [B] Back",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    } else {
+                        Text(
+                            text = "[B] Return to Tabs",
+                            fontSize = 10.sp,
+                            color = Color.Gray
+                        )
+                    }
+                }
+            }
+
+            // Sleek, Low-Profile Bottom Navigation Bar with Focus Outline
             NavigationBar(
                 containerColor = Color(0xFF0D0F12),
                 tonalElevation = 0.dp,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp)
+                    .then(
+                        if (isBottomBarFocused) {
+                            Modifier.border(
+                                width = 2.dp,
+                                color = MaterialTheme.colorScheme.primary,
+                                shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
+                            )
+                        } else {
+                            Modifier
+                        }
+                    )
             ) {
                 NavigationBarItem(
                     selected = selectedTab == BottomTab.BROWSE,
-                    onClick = { viewModel.selectTab(BottomTab.BROWSE) },
+                    onClick = {
+                        viewModel.selectTab(BottomTab.BROWSE)
+                        viewModel.enterContent()
+                    },
                     icon = { Icon(imageVector = Icons.Default.Explore, contentDescription = "Browse", modifier = Modifier.size(20.dp)) },
-                    label = { Text("Browse", fontSize = 11.sp) },
+                    label = { Text("Browse", fontSize = 11.sp, fontWeight = if (selectedTab == BottomTab.BROWSE && isBottomBarFocused) FontWeight.Bold else FontWeight.Normal) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.primary,
                         selectedTextColor = MaterialTheme.colorScheme.primary,
                         unselectedIconColor = Color.Gray,
                         unselectedTextColor = Color.Gray,
-                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                        indicatorColor = if (isBottomBarFocused) MaterialTheme.colorScheme.primary.copy(alpha = 0.28f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                     )
                 )
 
                 NavigationBarItem(
                     selected = selectedTab == BottomTab.LIBRARY,
-                    onClick = { viewModel.selectTab(BottomTab.LIBRARY) },
+                    onClick = {
+                        viewModel.selectTab(BottomTab.LIBRARY)
+                        viewModel.enterContent()
+                    },
                     icon = { Icon(imageVector = Icons.Default.FolderSpecial, contentDescription = "Library", modifier = Modifier.size(20.dp)) },
-                    label = { Text("Library", fontSize = 11.sp) },
+                    label = { Text("Library", fontSize = 11.sp, fontWeight = if (selectedTab == BottomTab.LIBRARY && isBottomBarFocused) FontWeight.Bold else FontWeight.Normal) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.primary,
                         selectedTextColor = MaterialTheme.colorScheme.primary,
                         unselectedIconColor = Color.Gray,
                         unselectedTextColor = Color.Gray,
-                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                        indicatorColor = if (isBottomBarFocused) MaterialTheme.colorScheme.primary.copy(alpha = 0.28f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                     )
                 )
 
                 NavigationBarItem(
                     selected = selectedTab == BottomTab.DOWNLOADS,
-                    onClick = { viewModel.selectTab(BottomTab.DOWNLOADS) },
+                    onClick = {
+                        viewModel.selectTab(BottomTab.DOWNLOADS)
+                        viewModel.enterContent()
+                    },
                     icon = {
                         BadgedBox(
                             badge = {
@@ -120,27 +184,30 @@ fun BottomScreenContent(
                             Icon(imageVector = Icons.Default.Download, contentDescription = "Downloads", modifier = Modifier.size(20.dp))
                         }
                     },
-                    label = { Text("Downloads", fontSize = 11.sp) },
+                    label = { Text("Downloads", fontSize = 11.sp, fontWeight = if (selectedTab == BottomTab.DOWNLOADS && isBottomBarFocused) FontWeight.Bold else FontWeight.Normal) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.primary,
                         selectedTextColor = MaterialTheme.colorScheme.primary,
                         unselectedIconColor = Color.Gray,
                         unselectedTextColor = Color.Gray,
-                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                        indicatorColor = if (isBottomBarFocused) MaterialTheme.colorScheme.primary.copy(alpha = 0.28f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                     )
                 )
 
                 NavigationBarItem(
                     selected = selectedTab == BottomTab.SETTINGS,
-                    onClick = { viewModel.selectTab(BottomTab.SETTINGS) },
+                    onClick = {
+                        viewModel.selectTab(BottomTab.SETTINGS)
+                        viewModel.enterContent()
+                    },
                     icon = { Icon(imageVector = Icons.Default.Settings, contentDescription = "Settings", modifier = Modifier.size(20.dp)) },
-                    label = { Text("Settings", fontSize = 11.sp) },
+                    label = { Text("Settings", fontSize = 11.sp, fontWeight = if (selectedTab == BottomTab.SETTINGS && isBottomBarFocused) FontWeight.Bold else FontWeight.Normal) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.primary,
                         selectedTextColor = MaterialTheme.colorScheme.primary,
                         unselectedIconColor = Color.Gray,
                         unselectedTextColor = Color.Gray,
-                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                        indicatorColor = if (isBottomBarFocused) MaterialTheme.colorScheme.primary.copy(alpha = 0.28f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                     )
                 )
             }
@@ -180,6 +247,9 @@ private fun BrowseTabContent(viewModel: MainViewModel) {
     val isLoadingMore by viewModel.isLoadingMore.collectAsState()
     val canLoadMore by viewModel.canLoadMore.collectAsState()
 
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -192,11 +262,21 @@ private fun BrowseTabContent(viewModel: MainViewModel) {
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text("Search 3DS ROMs, Updates, DLC...", color = Color.Gray) },
             leadingIcon = {
-                Icon(imageVector = Icons.Default.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.primary)
+                IconButton(onClick = {
+                    keyboardController?.hide()
+                    focusManager.clearFocus()
+                    viewModel.search()
+                }) {
+                    Icon(imageVector = Icons.Default.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.primary)
+                }
             },
             trailingIcon = {
                 if (searchQuery.isNotEmpty()) {
-                    IconButton(onClick = { viewModel.onSearchQueryChanged("") }) {
+                    IconButton(onClick = {
+                        viewModel.onSearchQueryChanged("")
+                        keyboardController?.hide()
+                        focusManager.clearFocus()
+                    }) {
                         Icon(imageVector = Icons.Default.Close, contentDescription = "Clear", tint = Color.Gray)
                     }
                 }
@@ -212,7 +292,13 @@ private fun BrowseTabContent(viewModel: MainViewModel) {
                 unfocusedTextColor = Color.White
             ),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { viewModel.search() })
+            keyboardActions = KeyboardActions(
+                onSearch = {
+                    keyboardController?.hide()
+                    focusManager.clearFocus()
+                    viewModel.search()
+                }
+            )
         )
 
         Spacer(modifier = Modifier.height(10.dp))
@@ -330,7 +416,11 @@ private fun BrowseTabContent(viewModel: MainViewModel) {
                     TitleListItem(
                         title = title,
                         isSelected = isSelected,
-                        onClick = { viewModel.selectTitle(title) }
+                        onClick = {
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                            viewModel.selectTitle(title)
+                        }
                     )
                 }
 
@@ -389,8 +479,16 @@ private fun TitleListItem(
                     ?: title.artwork?.primaryCoverUrl
                     ?: title.artwork?.fallbackUrls?.firstOrNull()
 
+                val context = LocalContext.current
+                val request = remember(thumbUrl) {
+                    ImageRequest.Builder(context)
+                        .data(thumbUrl)
+                        .crossfade(true)
+                        .build()
+                }
+
                 AsyncImage(
-                    model = thumbUrl,
+                    model = request,
                     contentDescription = title.name,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
