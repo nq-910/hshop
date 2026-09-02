@@ -4,7 +4,7 @@
 
 **A high-performance, dual-screen native Android client designed exclusively for the AYN Thor handheld console.**
 
-[![Release](https://img.shields.io/github/v/release/nq-910/hshop?style=for-the-badge&color=2ecc71&logo=android)](https://github.com/nq-910/hshop/releases)
+[![Release](https://img.shields.io/github/v/release/nq-910/hshop?include_prereleases&style=for-the-badge&color=2ecc71&logo=android)](https://github.com/nq-910/hshop/releases)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0+-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org/)
 [![Platform](https://img.shields.io/badge/Target-AYN%20Thor-00E5FF?style=for-the-badge&logo=nintendo3ds&logoColor=white)](https://www.ayntec.com/)
 [![License](https://img.shields.io/badge/License-GPLv3%2FMIT-orange?style=for-the-badge)](LICENSE)
