@@ -68,33 +68,39 @@ fun BottomScreenContent(
                 }
             }
 
-            // Bottom Navigation Bar
+            // Sleek, Low-Profile Bottom Navigation Bar
             NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 8.dp,
-                modifier = Modifier.fillMaxWidth()
+                containerColor = Color(0xFF0D0F12),
+                tonalElevation = 0.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
             ) {
                 NavigationBarItem(
                     selected = selectedTab == BottomTab.BROWSE,
                     onClick = { viewModel.selectTab(BottomTab.BROWSE) },
-                    icon = { Icon(imageVector = Icons.Default.Explore, contentDescription = "Browse") },
-                    label = { Text("Browse") },
+                    icon = { Icon(imageVector = Icons.Default.Explore, contentDescription = "Browse", modifier = Modifier.size(20.dp)) },
+                    label = { Text("Browse", fontSize = 11.sp) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.primary,
                         selectedTextColor = MaterialTheme.colorScheme.primary,
-                        indicatorColor = MaterialTheme.colorScheme.surfaceVariant
+                        unselectedIconColor = Color.Gray,
+                        unselectedTextColor = Color.Gray,
+                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                     )
                 )
 
                 NavigationBarItem(
                     selected = selectedTab == BottomTab.LIBRARY,
                     onClick = { viewModel.selectTab(BottomTab.LIBRARY) },
-                    icon = { Icon(imageVector = Icons.Default.FolderSpecial, contentDescription = "Library") },
-                    label = { Text("Library") },
+                    icon = { Icon(imageVector = Icons.Default.FolderSpecial, contentDescription = "Library", modifier = Modifier.size(20.dp)) },
+                    label = { Text("Library", fontSize = 11.sp) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.primary,
                         selectedTextColor = MaterialTheme.colorScheme.primary,
-                        indicatorColor = MaterialTheme.colorScheme.surfaceVariant
+                        unselectedIconColor = Color.Gray,
+                        unselectedTextColor = Color.Gray,
+                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                     )
                 )
 
@@ -106,31 +112,35 @@ fun BottomScreenContent(
                             badge = {
                                 if (activeDownloadsCount > 0) {
                                     Badge(containerColor = MaterialTheme.colorScheme.primary) {
-                                        Text(activeDownloadsCount.toString(), color = Color.Black)
+                                        Text(activeDownloadsCount.toString(), color = Color.Black, fontSize = 9.sp)
                                     }
                                 }
                             }
                         ) {
-                            Icon(imageVector = Icons.Default.Download, contentDescription = "Downloads")
+                            Icon(imageVector = Icons.Default.Download, contentDescription = "Downloads", modifier = Modifier.size(20.dp))
                         }
                     },
-                    label = { Text("Downloads") },
+                    label = { Text("Downloads", fontSize = 11.sp) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.primary,
                         selectedTextColor = MaterialTheme.colorScheme.primary,
-                        indicatorColor = MaterialTheme.colorScheme.surfaceVariant
+                        unselectedIconColor = Color.Gray,
+                        unselectedTextColor = Color.Gray,
+                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                     )
                 )
 
                 NavigationBarItem(
                     selected = selectedTab == BottomTab.SETTINGS,
                     onClick = { viewModel.selectTab(BottomTab.SETTINGS) },
-                    icon = { Icon(imageVector = Icons.Default.Settings, contentDescription = "Settings") },
-                    label = { Text("Settings") },
+                    icon = { Icon(imageVector = Icons.Default.Settings, contentDescription = "Settings", modifier = Modifier.size(20.dp)) },
+                    label = { Text("Settings", fontSize = 11.sp) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.primary,
                         selectedTextColor = MaterialTheme.colorScheme.primary,
-                        indicatorColor = MaterialTheme.colorScheme.surfaceVariant
+                        unselectedIconColor = Color.Gray,
+                        unselectedTextColor = Color.Gray,
+                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                     )
                 )
             }

@@ -4,7 +4,7 @@
 
 **A high-performance, dual-screen native Android client designed exclusively for the AYN Thor handheld console.**
 
-[![Release](https://img.shields.io/github/v/release/yggdrasil-seed/hshop?style=for-the-badge&color=2ecc71&logo=android)](https://github.com/yggdrasil-seed/hshop/releases)
+[![Release](https://img.shields.io/github/v/release/nq-910/hshop?style=for-the-badge&color=2ecc71&logo=android)](https://github.com/nq-910/hshop/releases)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0+-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org/)
 [![Platform](https://img.shields.io/badge/Target-AYN%20Thor-00E5FF?style=for-the-badge&logo=nintendo3ds&logoColor=white)](https://www.ayntec.com/)
 [![License](https://img.shields.io/badge/License-GPLv3%2FMIT-orange?style=for-the-badge)](LICENSE)
@@ -53,7 +53,7 @@ Full hardware input support for the AYN Thor gamepad including D-Pad navigation,
 
 ## 📥 Installation
 
-Grab the latest pre-compiled APK from the [**GitHub Releases**](https://github.com/yggdrasil-seed/hshop/releases) page.
+Grab the latest pre-compiled APK from the [**GitHub Releases**](https://github.com/nq-910/hshop/releases) page.
 
 ```bash
 # Install via ADB directly to your AYN Thor
@@ -71,7 +71,7 @@ adb install -r hshop-thor-v0.0.2-beta.apk
 
 ```bash
 # Clone the repository
-git clone https://github.com/yggdrasil-seed/hshop.git
+git clone https://github.com/nq-910/hshop.git
 cd hshop
 
 # Build Release APK
