@@ -53,6 +53,7 @@ data class HShopTitleDetail(
 @Serializable
 data class GameTdbMetadata(
     val gameId: String,
+    val titleId: String = "",
     val name: String = "",
     val title: String = "",
     val synopsis: String = "",
@@ -66,5 +67,8 @@ data class GameTdbMetadata(
     val players: String = "",
     val wifiFeatures: String = "",
     val languages: String = "",
-    val region: String = ""
+    val region: String = "",
+    val firmware: String = "",
+    val trimmedSize: Long = 0L,
+    val card: String = ""
 )

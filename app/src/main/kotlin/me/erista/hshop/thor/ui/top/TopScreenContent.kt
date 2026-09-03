@@ -754,6 +754,20 @@ private fun DetailView(
                             }
                         }
                     }
+                    if (meta.firmware.isNotEmpty()) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = "FW ${meta.firmware}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.9f),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
                     if (meta.genre.isNotEmpty()) {
                         meta.genre.split(",").map { it.trim().replaceFirstChar { c -> c.uppercase() } }.filter { it.isNotEmpty() }.take(3).forEach { g ->
                             Surface(

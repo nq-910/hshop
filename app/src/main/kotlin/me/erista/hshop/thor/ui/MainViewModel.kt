@@ -676,7 +676,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val cached = titleDetailCache[summary.id]
         if (cached != null) {
             val enrichedCached = if (cached.gameTdb == null) {
-                val meta = gameTdbRepo.findMetadataByProductCode(cached.productCode.ifEmpty { summary.productCode }, cached.name)
+                val meta = gameTdbRepo.findMetadata(
+                    titleId = cached.titleId.ifEmpty { summary.titleId },
+                    productCode = cached.productCode.ifEmpty { summary.productCode },
+                    fallbackTitle = cached.name
+                )
                 val updated = cached.copy(
                     gameTdb = meta,
                     description = if (cached.description.isBlank() && !meta?.synopsis.isNullOrBlank()) meta!!.synopsis else cached.description
@@ -697,7 +701,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         loadTitleDetailJob?.cancel()
 
         // Immediately present basic details and artwork to Top Screen (0ms local DB)
-        val meta = gameTdbRepo.findMetadataByProductCode(summary.productCode, summary.name)
+        val meta = gameTdbRepo.findMetadata(
+            titleId = summary.titleId,
+            productCode = summary.productCode,
+            fallbackTitle = summary.name
+        )
         val initialDetail = HShopTitleDetail(
             id = summary.id,
             name = summary.name,
@@ -727,7 +735,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             kotlinx.coroutines.delay(300)
             try {
                 val detail = scraper.fetchTitleDetail(summary.id)
-                val enrichedMeta = meta ?: gameTdbRepo.findMetadataByProductCode(detail.productCode, detail.name)
+                val enrichedMeta = meta ?: gameTdbRepo.findMetadata(
+                    titleId = detail.titleId.ifEmpty { summary.titleId },
+                    productCode = detail.productCode.ifEmpty { summary.productCode },
+                    fallbackTitle = detail.name
+                )
                 val enrichedDetail = detail.copy(
                     gameTdb = enrichedMeta,
                     description = if (detail.description.isBlank() && !enrichedMeta?.synopsis.isNullOrBlank()) enrichedMeta!!.synopsis else detail.description
