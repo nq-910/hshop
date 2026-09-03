@@ -13,11 +13,13 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import me.erista.hshop.model.*
+import me.erista.hshop.scraper.ArtworkResolver
 import me.erista.hshop.scraper.HShopScraper
 import me.erista.hshop.thor.data.AppSettings
 import me.erista.hshop.thor.data.AppTheme
 import me.erista.hshop.thor.data.DownloadStatus
 import me.erista.hshop.thor.data.DownloadTask
+import me.erista.hshop.thor.data.GameTdbRepository
 import me.erista.hshop.thor.data.LocalFileType
 import me.erista.hshop.thor.data.LocalRomItem
 import me.erista.hshop.thor.data.SettingsRepository
@@ -39,6 +41,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val scraper = HShopScraper()
     private val settingsRepo = SettingsRepository(application)
     private val downloadManager = ThorDownloadManager(application)
+    private val gameTdbRepo = GameTdbRepository(application)
 
     val settings: StateFlow<AppSettings> = settingsRepo.settings
     val downloadTasks: StateFlow<List<DownloadTask>> = downloadManager.tasks
@@ -70,6 +73,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // Focus state: true = Nav keys navigate Bottom Navigation tabs; false = Nav keys navigate screen content
     private val _isBottomBarFocused = MutableStateFlow(true)
     val isBottomBarFocused: StateFlow<Boolean> = _isBottomBarFocused.asStateFlow()
+
+    private val _isSynopsisModalOpen = MutableStateFlow(false)
+    val isSynopsisModalOpen: StateFlow<Boolean> = _isSynopsisModalOpen.asStateFlow()
+
+    fun openSynopsisModal() {
+        _isSynopsisModalOpen.value = true
+    }
+
+    fun closeSynopsisModal() {
+        _isSynopsisModalOpen.value = false
+    }
+
+    fun toggleSynopsisModal() {
+        _isSynopsisModalOpen.value = !_isSynopsisModalOpen.value
+    }
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -231,8 +249,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     if (type != null) {
                         val baseName = canonicalFile.nameWithoutExtension
                         val prodCodeMatch = Regex("\\[([A-Z0-9-]+)\\]").find(baseName)
-                        val prodCode = prodCodeMatch?.groupValues?.get(1) ?: ""
-                        val cleanName = baseName.replace(Regex("\\[[A-Z0-9-]+\\]"), "").trim()
+                        var prodCode = prodCodeMatch?.groupValues?.get(1) ?: ""
+                        var cleanName = baseName.replace(Regex("\\[[A-Z0-9-]+\\]"), "").trim()
+
+                        val meta = if (prodCode.isNotEmpty()) {
+                            gameTdbRepo.findMetadataByProductCode(prodCode, cleanName)
+                        } else {
+                            ArtworkResolver.extractGameId(baseName)?.let { gameTdbRepo.findMetadataByGameId(it) }
+                                ?: gameTdbRepo.findMetadataByTitle(cleanName)
+                        }
+
+                        if (meta != null) {
+                            if (cleanName.isEmpty() || cleanName.equals(baseName, ignoreCase = true)) {
+                                cleanName = meta.title.ifEmpty { cleanName }
+                            }
+                            if (prodCode.isEmpty() && meta.gameId.isNotEmpty()) {
+                                prodCode = "CTR-P-${meta.gameId}"
+                            }
+                        }
 
                         val isUpdateDlc = type == LocalFileType.CIA &&
                                 (canonicalFile.absolutePath.contains("Updates_DLC", ignoreCase = true) ||
@@ -271,25 +305,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectLocalRom(item: LocalRomItem) {
         _selectedLocalRom.value = item
+        val meta = gameTdbRepo.findMetadataByProductCode(item.productCode, item.name)
+            ?: ArtworkResolver.extractGameId(item.file.name)?.let { gameTdbRepo.findMetadataByGameId(it) }
+
+        val gameId = meta?.gameId
+            ?: ArtworkResolver.extractGameId(item.productCode)
+            ?: ArtworkResolver.extractGameId(item.file.name)
+
+        val resolvedTitle = meta?.title?.ifEmpty { item.name } ?: item.name
+
+        val artwork = ArtworkResolver.resolveArtwork(
+            name = resolvedTitle,
+            productCode = item.productCode,
+            overrideGameId = gameId,
+            overrideRegion = meta?.region?.takeIf { it.isNotEmpty() }
+        )
+
         val detail = HShopTitleDetail(
             id = item.productCode.ifEmpty { item.file.name },
-            name = item.name,
+            name = resolvedTitle,
             categorySlug = if (item.isUpdateOrDlc) "updates" else "games",
             subcategorySlug = "installed",
-            titleId = "N/A",
-            productCode = item.productCode,
+            titleId = gameId ?: "N/A",
+            productCode = item.productCode.ifEmpty { gameId?.let { "CTR-P-$it" } ?: "" },
             version = "Installed",
             sizeString = item.sizeString,
             contentType = item.fileType.displayName,
-            addedDate = "Local Storage",
+            addedDate = meta?.releaseDate?.ifEmpty { "Local Storage" } ?: "Local Storage",
             updatedDate = "N/A",
             downloadCount = 0L,
-            description = "Stored at: ${item.file.absolutePath}",
-            artwork = me.erista.hshop.model.ArtworkInfo(
-                primaryCoverUrl = null,
-                highResCoverUrl = null,
-                fallbackUrls = emptyList()
-            )
+            description = meta?.synopsis?.ifEmpty { "Stored at: ${item.file.absolutePath}" } ?: "Stored at: ${item.file.absolutePath}",
+            artwork = artwork,
+            gameTdb = meta
         )
         _selectedTitleDetail.value = detail
         _statusMessage.value = "Selected local file: ${item.file.name}"
@@ -624,13 +671,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var loadTitleDetailJob: kotlinx.coroutines.Job? = null
 
     fun selectTitle(summary: HShopTitleSummary) {
-        // 1. If already cached, restore instantly with ZERO reload or network delay
+        _isSynopsisModalOpen.value = false
+        // 1. If already cached, ensure it has GameTDB metadata and restore instantly
         val cached = titleDetailCache[summary.id]
         if (cached != null) {
+            val enrichedCached = if (cached.gameTdb == null) {
+                val meta = gameTdbRepo.findMetadataByProductCode(cached.productCode.ifEmpty { summary.productCode }, cached.name)
+                val updated = cached.copy(
+                    gameTdb = meta,
+                    description = if (cached.description.isBlank() && !meta?.synopsis.isNullOrBlank()) meta!!.synopsis else cached.description
+                )
+                titleDetailCache[summary.id] = updated
+                updated
+            } else cached
+
             loadTitleDetailJob?.cancel()
-            _selectedTitleDetail.value = cached
-            _lastBrowseDetail = cached
-            _statusMessage.value = "Selected ${cached.name}"
+            _selectedTitleDetail.value = enrichedCached
+            _lastBrowseDetail = enrichedCached
+            _statusMessage.value = enrichedCached.name
             preloadUpcomingArtwork(summary)
             return
         }
@@ -638,7 +696,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // 2. Cancel previous in-flight detail loading job to avoid race conditions
         loadTitleDetailJob?.cancel()
 
-        // Immediately present basic details and artwork to Top Screen
+        // Immediately present basic details and artwork to Top Screen (0ms local DB)
+        val meta = gameTdbRepo.findMetadataByProductCode(summary.productCode, summary.name)
         val initialDetail = HShopTitleDetail(
             id = summary.id,
             name = summary.name,
@@ -649,29 +708,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             version = summary.version,
             sizeString = summary.sizeString,
             contentType = summary.contentType,
-            addedDate = "Loading...",
-            updatedDate = "Loading...",
+            addedDate = meta?.releaseDate?.ifEmpty { "Ready" } ?: "Ready",
+            updatedDate = "",
             downloadCount = 0L,
-            artwork = summary.artwork
+            description = meta?.synopsis ?: "",
+            artwork = summary.artwork,
+            gameTdb = meta
         )
         _selectedTitleDetail.value = initialDetail
         _lastBrowseDetail = initialDetail
+        _statusMessage.value = summary.name
 
         // Pre-download upcoming title artwork and details ahead of the cursor
         preloadUpcomingArtwork(summary)
 
+        // Silently fetch web technical specs (SHA-256, DLC list) after cursor settles (300ms debounce)
         loadTitleDetailJob = viewModelScope.launch {
-            _statusMessage.value = "Loading ${summary.name}..."
+            kotlinx.coroutines.delay(300)
             try {
                 val detail = scraper.fetchTitleDetail(summary.id)
-                titleDetailCache[summary.id] = detail
-                _selectedTitleDetail.value = detail
-                _lastBrowseDetail = detail
-                _statusMessage.value = "Loaded ${summary.name}"
+                val enrichedMeta = meta ?: gameTdbRepo.findMetadataByProductCode(detail.productCode, detail.name)
+                val enrichedDetail = detail.copy(
+                    gameTdb = enrichedMeta,
+                    description = if (detail.description.isBlank() && !enrichedMeta?.synopsis.isNullOrBlank()) enrichedMeta!!.synopsis else detail.description
+                )
+                titleDetailCache[summary.id] = enrichedDetail
+                _selectedTitleDetail.value = enrichedDetail
+                _lastBrowseDetail = enrichedDetail
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // Keep the draft detail with artwork
+                // Keep the draft detail with artwork and GameTDB metadata
             }
         }
     }
@@ -892,6 +959,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun handleButtonB(): Boolean {
+        if (_isSynopsisModalOpen.value) {
+            _isSynopsisModalOpen.value = false
+            return true
+        }
         if (!_isBottomBarFocused.value) {
             exitContentToBottomBar()
             return true
@@ -929,26 +1000,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun syncDownloadTaskToTopScreen(taskId: String) {
         val task = downloadTasks.value.find { it.id == taskId } ?: return
+        val meta = gameTdbRepo.findMetadataByProductCode(task.productCode, task.titleName)
+        val gameId = meta?.gameId ?: ArtworkResolver.extractGameId(task.productCode) ?: ArtworkResolver.extractGameId(task.titleName)
+        val artwork = ArtworkResolver.resolveArtwork(
+            name = meta?.title ?: task.titleName,
+            productCode = task.productCode,
+            overrideGameId = gameId,
+            overrideRegion = meta?.region?.takeIf { it.isNotEmpty() }
+        )
         val sizeStr = me.erista.hshop.thor.util.StorageUtils.formatSize(task.totalBytes.takeIf { it > 0 } ?: (task.progress * 1000000000L).toLong())
         val detail = HShopTitleDetail(
             id = task.id,
-            name = task.titleName,
+            name = meta?.title ?: task.titleName,
             categorySlug = "downloads",
             subcategorySlug = "queue",
-            titleId = "N/A",
+            titleId = gameId ?: "N/A",
             productCode = task.productCode,
             version = task.status.name,
             sizeString = sizeStr,
             contentType = "Download Task",
-            addedDate = "Queue",
+            addedDate = meta?.releaseDate?.ifEmpty { "Queue" } ?: "Queue",
             updatedDate = "N/A",
             downloadCount = 0L,
-            description = "Status: ${task.status.name} (${(task.progress * 100).toInt()}%)\nTarget: ${task.targetFilePath}",
-            artwork = me.erista.hshop.model.ArtworkInfo(
-                primaryCoverUrl = null,
-                highResCoverUrl = null,
-                fallbackUrls = emptyList()
-            )
+            description = meta?.synopsis?.ifEmpty { "Status: ${task.status.name} (${(task.progress * 100).toInt()}%)\nTarget: ${task.targetFilePath}" } ?: "Status: ${task.status.name} (${(task.progress * 100).toInt()}%)\nTarget: ${task.targetFilePath}",
+            artwork = artwork,
+            gameTdb = meta
         )
         _selectedTitleDetail.value = detail
     }

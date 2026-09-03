@@ -46,5 +46,25 @@ data class HShopTitleDetail(
     val sha256: String? = null,
     val description: String = "",
     val relatedContent: List<RelatedContentSummary> = emptyList(),
-    val artwork: ArtworkInfo? = null
+    val artwork: ArtworkInfo? = null,
+    val gameTdb: GameTdbMetadata? = null
+)
+
+@Serializable
+data class GameTdbMetadata(
+    val gameId: String,
+    val name: String = "",
+    val title: String = "",
+    val synopsis: String = "",
+    val developer: String = "",
+    val publisher: String = "",
+    val releaseDate: String = "",
+    val genre: String = "",
+    val ratingType: String = "",
+    val ratingValue: String = "",
+    val ratingDescriptors: String = "",
+    val players: String = "",
+    val wifiFeatures: String = "",
+    val languages: String = "",
+    val region: String = ""
 )

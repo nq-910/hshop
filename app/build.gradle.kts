@@ -75,3 +75,25 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
+
+tasks.register("updateReadmeVersion") {
+    description = "Automatically updates the release APK version filename in README.md based on android.defaultConfig.versionName"
+    doLast {
+        val readmeFile = rootProject.file("README.md")
+        if (readmeFile.exists()) {
+            val vName = android.defaultConfig.versionName ?: return@doLast
+            val content = readmeFile.readText()
+            val regex = Regex("""hshop-thor-v\d+\.\d+\.\d+(-[a-zA-Z0-9.]+)?\.apk""")
+            val updated = content.replace(regex, "hshop-thor-v$vName.apk")
+            if (content != updated) {
+                readmeFile.writeText(updated)
+                println("[Gradle] Automatically updated README.md APK version to: hshop-thor-v$vName.apk")
+            }
+        }
+    }
+}
+
+tasks.named("preBuild").configure {
+    dependsOn("updateReadmeVersion")
+}
+

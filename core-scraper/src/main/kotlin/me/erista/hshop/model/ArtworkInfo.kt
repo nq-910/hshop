@@ -8,6 +8,7 @@ data class ArtworkInfo(
     val thumbnailCoverUrl: String? = null,
     val highResCoverUrl: String? = null,
     val fullCoverWrapUrl: String? = null,
+    val box3dUrl: String? = null,
     val fallbackUrls: List<String> = emptyList(),
     val source: String = "GameTDB"
 )

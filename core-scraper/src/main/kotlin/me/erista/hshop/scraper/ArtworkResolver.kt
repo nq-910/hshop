@@ -12,10 +12,12 @@ object ArtworkResolver {
     fun resolveArtwork(
         name: String,
         productCode: String,
-        subcategorySlug: String
+        subcategorySlug: String = "",
+        overrideGameId: String? = null,
+        overrideRegion: String? = null
     ): ArtworkInfo {
-        val gameId = extractGameId(productCode)
-        val regionCode = inferGameTDBRegion(productCode, subcategorySlug)
+        val gameId = overrideGameId ?: extractGameId(productCode) ?: extractGameId(name)
+        val regionCode = overrideRegion ?: inferGameTDBRegion(productCode, subcategorySlug)
         val isPhysicalCartridge = productCode.startsWith("CTR-P-", ignoreCase = true)
 
         val primaryGameTdb = if (gameId != null) {
@@ -30,6 +32,10 @@ object ArtworkResolver {
             "https://art.gametdb.com/3ds/coverHQ/$regionCode/$gameId.jpg"
         } else null
 
+        val box3dGameTdb = if (gameId != null) {
+            "https://art.gametdb.com/3ds/box3d/$regionCode/$gameId.png"
+        } else null
+
         // Only physical cartridge releases (CTR-P) have full box wrap scans
         val fullCoverGameTdb = if (gameId != null && isPhysicalCartridge) {
             "https://art.gametdb.com/3ds/coverfullHQ/$regionCode/$gameId.jpg"
@@ -41,6 +47,7 @@ object ArtworkResolver {
             val altRegions = listOf("US", "EN", "JA", "KO").filter { it != regionCode }
             for (alt in altRegions) {
                 fallbacks.add("https://art.gametdb.com/3ds/cover/$alt/$gameId.jpg")
+                fallbacks.add("https://art.gametdb.com/3ds/box3d/$alt/$gameId.png")
             }
         }
 
@@ -57,6 +64,7 @@ object ArtworkResolver {
             thumbnailCoverUrl = thumbGameTdb,
             highResCoverUrl = hqGameTdb,
             fullCoverWrapUrl = fullCoverGameTdb,
+            box3dUrl = box3dGameTdb,
             fallbackUrls = fallbacks,
             source = if (gameId != null) "GameTDB" else "Libretro"
         )
@@ -70,15 +78,22 @@ object ArtworkResolver {
         val clean = productCode.trim()
         if (clean.isEmpty()) return null
 
-        val parts = clean.split("-")
+        val bracketMatch = Regex("\\[([A-Z0-9-]+)\\]").find(clean)
+        val target = bracketMatch?.groupValues?.get(1) ?: clean
+
+        val parts = target.split("-")
         if (parts.size >= 3) {
             val lastPart = parts.last()
             if (lastPart.length >= 4) {
                 return lastPart.take(4).uppercase()
             }
         }
-        val match = Regex("[A-Z0-9]{4}$").find(clean)
-        return match?.value?.uppercase()
+        val match = Regex("(?<=^|[^A-Z0-9])([A-Z0-9]{4})(?=$|[^A-Z0-9])").find(target)
+        if (match != null) {
+            return match.groupValues[1].uppercase()
+        }
+        val endMatch = Regex("[A-Z0-9]{4}$").find(target)
+        return endMatch?.value?.uppercase()
     }
 
     /**

@@ -15,6 +15,9 @@ Browse, download, decrypt, compress, and launch Nintendo 3DS titles directly fro
 
 </div>
 
+> [!IMPORTANT]
+> **Legal Notice & Disclaimer**: This software is intended strictly for personal archiving, educational, and backup purposes. Only download, decrypt, or manage ROMs and digital titles for which you legally own a genuine physical copy. The authors and contributors do not host files, nor do they condone copyright infringement.
+
 ---
 
 ## 🌟 Key Highlights
@@ -76,10 +79,13 @@ Browse, download, decrypt, compress, and launch Nintendo 3DS titles directly fro
 
 Grab the latest pre-compiled APK from the [**GitHub Releases**](https://github.com/nq-910/hshop/releases) page.
 
-```bash
-# Install via ADB directly to your AYN Thor
-adb install -r hshop-thor-v0.0.2-beta.apk
-```
+- **Direct Install**: Download the `.apk` directly onto your AYN Thor and open it with any file manager.
+- **Via ADB (PC / Mac / Linux)**:
+  ```bash
+  adb install -r hshop-thor-v0.0.3-beta.apk
+  # Or install whichever version was downloaded:
+  # adb install -r hshop-thor-*.apk
+  ```
 
 ---
 
@@ -142,8 +148,17 @@ Detailed subsystem specifications are available in the [`docs/`](docs/) director
 
 ---
 
+## ⚖️ Legal Disclaimer
+
+- **Personal Backups Only**: This project is developed strictly for educational, research, and personal archival purposes. You must **only download, decrypt, or manage ROMs and digital titles for which you own a legally acquired physical cartridge or genuine copy**.
+- **No Hosting / Distribution**: The developers and contributors do not host, store, or distribute any copyrighted files, software, or ROMs.
+- **Intellectual Property**: All trademarks, system names, and game titles are the intellectual property of Nintendo Co., Ltd. and their respective copyright holders. This project is not affiliated with, endorsed by, or sponsored by Nintendo.
+
+---
+
 ## 📄 License & Credits
 
 - Upstream decryption routines based on Project_CTR (`ctrtool`, `makerom`).
 - Seekable `.zcci` specification compatible with [AzaharPlus](https://github.com/AzaharPlus/AzaharPlus).
 - Built with ❤️ for the handheld emulation community.
+
