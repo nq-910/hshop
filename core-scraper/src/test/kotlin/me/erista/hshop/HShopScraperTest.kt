@@ -3,7 +3,6 @@ package me.erista.hshop
 import kotlinx.coroutines.runBlocking
 import me.erista.hshop.model.HShopCategory
 import me.erista.hshop.scraper.ArtworkResolver
-import me.erista.hshop.scraper.CitraRomsScraper
 import me.erista.hshop.scraper.HShopScraper
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
@@ -11,7 +10,6 @@ import org.junit.jupiter.api.Test
 class HShopScraperTest {
 
     private val scraper = HShopScraper()
-    private val citraScraper = CitraRomsScraper()
 
     @Test
     fun testArtworkResolverGameIdExtraction() {
@@ -73,11 +71,5 @@ class HShopScraperTest {
         assertNotNull(detail.sha256)
         assertNotNull(detail.seed)
         assertFalse(detail.relatedContent.isEmpty(), "Should have related update data")
-    }
-
-    @Test
-    fun testLiveCitraRomsScraper() = runBlocking {
-        val roms = citraScraper.fetchRomList()
-        assertFalse(roms.isEmpty(), "Citra rom list should return items")
     }
 }

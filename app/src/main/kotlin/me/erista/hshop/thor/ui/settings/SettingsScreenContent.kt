@@ -47,7 +47,7 @@ fun SettingsScreenContent(
     var showInAppFolderPicker by remember { mutableStateOf(false) }
     var showUpdateFolderPicker by remember { mutableStateOf(false) }
 
-    var appCacheSize by remember { mutableStateOf(viewModel.getAppCacheSizeBytes()) }
+    var appCacheSize by remember { mutableLongStateOf(viewModel.getAppCacheSizeBytes()) }
     val internalFree = remember { Environment.getDataDirectory().usableSpace }
     val romDirFree = remember(settings.downloadPath) {
         StorageUtils.getUsableSpace(settings.downloadPath)

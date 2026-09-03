@@ -23,7 +23,6 @@ import me.erista.hshop.thor.data.GameTdbRepository
 import me.erista.hshop.thor.data.LocalFileType
 import me.erista.hshop.thor.data.LocalRomItem
 import me.erista.hshop.thor.data.SettingsRepository
-import me.erista.hshop.thor.download.AutoDownloadResolver
 import me.erista.hshop.thor.download.ThorDownloadManager
 import coil.imageLoader
 import coil.request.ImageRequest

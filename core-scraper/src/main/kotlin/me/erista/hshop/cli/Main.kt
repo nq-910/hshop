@@ -2,13 +2,10 @@ package me.erista.hshop.cli
 
 import kotlinx.coroutines.runBlocking
 import me.erista.hshop.model.HShopCategory
-import me.erista.hshop.scraper.ArtworkResolver
-import me.erista.hshop.scraper.CitraRomsScraper
 import me.erista.hshop.scraper.HShopScraper
 
 fun main(args: Array<String>) = runBlocking {
     val scraper = HShopScraper()
-    val citraScraper = CitraRomsScraper()
 
     println("==========================================================")
     println("        hShop Scraper & Artwork Engine (AYN Thor)         ")
@@ -62,15 +59,6 @@ fun main(args: Array<String>) = runBlocking {
                 detail.relatedContent.forEach { r ->
                     println("  - [${r.relationType}] ${r.name} (ID: ${r.id}, Size: ${r.sizeString})")
                 }
-            }
-        }
-
-        "citra" -> {
-            println("\n[4] Scraping ROM list from citra-emulator.com/3ds-roms...")
-            val roms = citraScraper.fetchRomList()
-            println("Found ${roms.size} curated ROMs / Hacks on Citra site:")
-            roms.take(5).forEach { r ->
-                println("  - 🕹️ ${r.title} | Image: ${r.imageUrl}")
             }
         }
 
