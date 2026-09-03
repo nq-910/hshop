@@ -53,7 +53,6 @@ object AutoDownloadResolver {
                     val settings = webView.settings
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
-                    settings.databaseEnabled = true
                     settings.userAgentString = USER_AGENT
                     settings.cacheMode = WebSettings.LOAD_DEFAULT
 
