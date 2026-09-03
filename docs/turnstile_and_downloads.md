@@ -1,7 +1,7 @@
 # 🌐 Turnstile & Download Pipeline
 
 ## Overview
-hShop protects its download endpoints using **Cloudflare Turnstile** anti-bot verification. Because Turnstile executes client-side WebGL/Canvas fingerprinting and telemetry that rejects Python-based scraping tools (such as `cloudscraper` or `requests`), **hShop Thor** utilizes a native Android Chromium WebView execution engine to obtain direct, high-speed CDN URLs seamlessly.
+hShop protects its download endpoints using **Cloudflare Turnstile** anti-bot verification. Because Turnstile executes client-side WebGL/Canvas fingerprinting and telemetry that rejects headless HTTP requests, **hShop Thor** utilizes a native Android Chromium WebView execution engine to obtain direct, high-speed CDN URLs seamlessly.
 
 ---
 
@@ -34,9 +34,9 @@ flowchart TD
 
 ---
 
-## 2. Why Cloudflare Turnstile Rejects Bot Solvers
+## 2. Turnstile Verification Requirements
 
-Tools like `cloudscraper` or HTTP clients fail on hShop's download endpoints with **HTTP 403 Forbidden**:
+Direct HTTP requests to hShop download endpoints return **HTTP 403 Forbidden** because:
 1. **Title Page**: `https://hshop.erista.me/t/{id}` embeds `challenges.cloudflare.com/turnstile/v0/api.js`.
 2. **Download Widget**: `https://hshop.erista.me/t/{id}/download-widget` strictly validates a one-time cryptographic `captcha_token` against Cloudflare's backend API (`siteverify`).
 3. **Hardware-Level Fingerprinting**: Turnstile requires a real browser engine executing JavaScript, canvas operations, and TLS client-hello profiles. Android's official Chromium WebView provides the required genuine environment natively.
