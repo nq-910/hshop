@@ -44,6 +44,9 @@ object ArtworkResolver {
         // Generate fallbacks for alternative regions (US / EN / JA) and Libretro
         val fallbacks = mutableListOf<String>()
         if (gameId != null) {
+            // High-speed CDN mirror from thor-3ds-db WebP archive
+            fallbacks.add("https://cdn.jsdelivr.net/gh/nq-910/thor-3ds-db@main/covers/$gameId.webp")
+
             val altRegions = listOf("US", "EN", "JA", "KO").filter { it != regionCode }
             for (alt in altRegions) {
                 fallbacks.add("https://art.gametdb.com/3ds/cover/$alt/$gameId.jpg")
