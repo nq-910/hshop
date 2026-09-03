@@ -27,3 +27,6 @@ Welcome to the technical documentation for **hShop Thor**. This directory contai
 7. [**Storage & Cache Architecture (`storage_and_cache.md`)**](storage_and_cache.md)  
    Pre-flight storage checks, atomic staging with `.download` files, LRU and Coil cache policies, and cache clearing.
 
+8. [**Metadata & Box Art Pipeline (`metadata_and_boxart.md`)**](metadata_and_boxart.md)  
+   Unified GameTDB + 3DS scene releases SQLite database, exact 16-character Title ID indexing, firmware constraints, and `thor-3ds-db` jsDelivr WebP CDN.
+

@@ -116,14 +116,14 @@ cd hshop
 ```
 hshop/
 ├── app/                        # Main Android Application (Jetpack Compose)
-│   ├── src/main/assets/        # seeddb.bin & cdn-nintendo-leaf.pem
+│   ├── src/main/assets/        # gametdb.db, 3dstdb.xml, seeddb.bin & cdn-nintendo-leaf.pem
 │   ├── src/main/jniLibs/       # Native libcia3ds.so (ARM64, ARMv7, x86_64)
 │   └── src/main/kotlin/
 │       ├── io/github/cia3ds/   # JNI Decryption Bindings & SeedFetcher
 │       └── me/erista/hshop/thor/
 │           ├── compressor/     # Seekable Z3DS (.ZCCI) Stream Compressor
 │           ├── converter/      # CIA to CCI Decryption Pipeline
-│           ├── data/           # AppSettings, DownloadModels & Persistence
+│           ├── data/           # GameTdbRepository, DownloadModels & Persistence
 │           ├── download/       # ThorDownloadManager & Turnstile Solver
 │           ├── presentation/   # Dual-Screen Presentation Controller
 │           ├── ui/             # Top/Bottom Dual-Screen UI & ViewModels
@@ -140,6 +140,7 @@ hshop/
 Detailed subsystem specifications are available in the [`docs/`](docs/) directory:
 - [**Dual-Screen Architecture**](docs/dual_screen_architecture.md)
 - [**Decryption & Cryptography**](docs/decryption_and_cryptography.md)
+- [**Metadata & Box Art Pipeline**](docs/metadata_and_boxart.md)
 - [**Seekable .ZCCI Compression**](docs/zcci_compression.md)
 - [**Storage & Cache Architecture**](docs/storage_and_cache.md)
 - [**Gamepad & Input Navigation**](docs/input_and_gamepad.md)
