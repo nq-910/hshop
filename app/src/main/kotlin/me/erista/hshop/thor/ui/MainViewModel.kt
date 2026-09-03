@@ -304,19 +304,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectLocalRom(item: LocalRomItem) {
         _selectedLocalRom.value = item
-        val meta = gameTdbRepo.findMetadataByProductCode(item.productCode, item.name)
-            ?: ArtworkResolver.extractGameId(item.file.name)?.let { gameTdbRepo.findMetadataByGameId(it) }
-
-        val gameId = meta?.gameId
-            ?: ArtworkResolver.extractGameId(item.productCode)
+        val gameId = ArtworkResolver.extractGameId(item.productCode)
             ?: ArtworkResolver.extractGameId(item.file.name)
+            ?: ""
 
+        val meta = (if (gameId.isNotEmpty()) gameTdbRepo.findMetadataByProductCode(gameId, item.name) else null)
+            ?: gameTdbRepo.findMetadataByProductCode(item.productCode, item.name)
+
+        val resolvedGameId = meta?.gameId?.ifEmpty { gameId } ?: gameId
         val resolvedTitle = meta?.title?.ifEmpty { item.name } ?: item.name
 
         val artwork = ArtworkResolver.resolveArtwork(
             name = resolvedTitle,
             productCode = item.productCode,
-            overrideGameId = gameId,
+            overrideGameId = resolvedGameId.takeIf { it.isNotEmpty() },
             overrideRegion = meta?.region?.takeIf { it.isNotEmpty() }
         )
 
@@ -324,9 +325,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             id = item.productCode.ifEmpty { item.file.name },
             name = resolvedTitle,
             categorySlug = if (item.isUpdateOrDlc) "updates" else "games",
-            subcategorySlug = "installed",
-            titleId = gameId ?: "N/A",
-            productCode = item.productCode.ifEmpty { gameId?.let { "CTR-P-$it" } ?: "" },
+            subcategorySlug = item.fileType.name.lowercase(),
+            titleId = meta?.titleId?.takeIf { it.isNotEmpty() } ?: resolvedGameId.ifEmpty { "N/A" },
+            productCode = item.productCode.ifEmpty { if (resolvedGameId.isNotEmpty()) "CTR-P-$resolvedGameId" else "" },
             version = "Installed",
             sizeString = item.sizeString,
             contentType = item.fileType.displayName,
@@ -991,8 +992,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         selectTab(tabs[nextIndex])
     }
 
+    fun getFilteredLocalRoms(): List<LocalRomItem> {
+        val all = _localRoms.value
+        val filter = _selectedLocalFilter.value
+        return if (filter == "ALL") all else all.filter { it.fileType.name == filter }
+    }
+
     fun navigateLocalRomDown() {
-        val list = _localRoms.value
+        val list = getFilteredLocalRoms()
         if (list.isEmpty()) return
         val current = _selectedLocalRom.value
         val currentIndex = list.indexOfFirst { it.file.absolutePath == current?.file?.absolutePath }
@@ -1001,7 +1008,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun navigateLocalRomUp() {
-        val list = _localRoms.value
+        val list = getFilteredLocalRoms()
         if (list.isEmpty()) return
         val current = _selectedLocalRom.value
         val currentIndex = list.indexOfFirst { it.file.absolutePath == current?.file?.absolutePath }
@@ -1083,20 +1090,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectLocalFilter(filter: String) {
         _selectedLocalFilter.value = filter
+        val list = if (filter == "ALL") _localRoms.value else _localRoms.value.filter { it.fileType.name == filter }
+        val current = _selectedLocalRom.value
+        if (list.isNotEmpty() && (current == null || list.none { it.file.absolutePath == current.file.absolutePath })) {
+            selectLocalRom(list.first())
+        }
     }
 
     fun navigateLocalFilterNext() {
         val filters = listOf("ALL", "CCI", "ZCCI", "3DS", "CIA")
         val currentIdx = filters.indexOf(_selectedLocalFilter.value)
         val nextIdx = if (currentIdx < 0) 0 else (currentIdx + 1) % filters.size
-        _selectedLocalFilter.value = filters[nextIdx]
+        selectLocalFilter(filters[nextIdx])
     }
 
     fun navigateLocalFilterPrev() {
         val filters = listOf("ALL", "CCI", "ZCCI", "3DS", "CIA")
         val currentIdx = filters.indexOf(_selectedLocalFilter.value)
         val prevIdx = if (currentIdx <= 0) filters.size - 1 else currentIdx - 1
-        _selectedLocalFilter.value = filters[prevIdx]
+        selectLocalFilter(filters[prevIdx])
     }
 
     fun navigateContentLeft() {

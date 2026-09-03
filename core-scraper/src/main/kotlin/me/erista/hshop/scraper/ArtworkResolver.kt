@@ -6,6 +6,23 @@ import java.nio.charset.StandardCharsets
 
 object ArtworkResolver {
 
+    fun normalizeGameTdbRegion(region: String?): String? {
+        if (region.isNullOrBlank()) return null
+        return when (region.trim().uppercase()) {
+            "NTSC-U", "USA", "US" -> "US"
+            "PAL", "EUR", "EUROPE", "EN", "UK" -> "EN"
+            "NTSC-J", "JAP", "JAPAN", "JA", "JP" -> "JA"
+            "NTSC-K", "KOR", "KOREA", "KO" -> "KO"
+            "NTSC-C", "CHN", "CHINA", "TAIWAN", "ZH", "HK" -> "ZH"
+            "FR", "FRANCE" -> "FR"
+            "DE", "GERMANY" -> "DE"
+            "IT", "ITALY" -> "IT"
+            "ES", "SPAIN" -> "ES"
+            "AU", "AUSTRALIA" -> "AU"
+            else -> if (region.length == 2) region.uppercase() else null
+        }
+    }
+
     /**
      * Resolves artwork URLs from GameTDB and Libretro based on product code, subcategory, and title name.
      */
@@ -17,7 +34,7 @@ object ArtworkResolver {
         overrideRegion: String? = null
     ): ArtworkInfo {
         val gameId = overrideGameId ?: extractGameId(productCode) ?: extractGameId(name)
-        val regionCode = overrideRegion ?: inferGameTDBRegion(productCode, subcategorySlug)
+        val regionCode = normalizeGameTdbRegion(overrideRegion) ?: inferGameTDBRegion(productCode, subcategorySlug)
         val isPhysicalCartridge = productCode.startsWith("CTR-P-", ignoreCase = true)
 
         val primaryGameTdb = if (gameId != null) {
@@ -56,10 +73,20 @@ object ArtworkResolver {
 
         // Platform-specific Libretro thumbnails (3DS, SNES, NES, GB, GBC, GBA)
         val platformRepo = inferLibretroPlatformRepo(productCode)
-        val libretroName = sanitizeForLibretro(name, subcategorySlug)
-        fallbacks.add("https://raw.githubusercontent.com/libretro-thumbnails/$platformRepo/master/Named_Boxarts/$libretroName.png")
-        if (platformRepo != "Nintendo_-_Nintendo_3DS") {
-            fallbacks.add("https://raw.githubusercontent.com/libretro-thumbnails/Nintendo_-_Nintendo_3DS/master/Named_Boxarts/$libretroName.png")
+        val libretroTags = when (regionCode) {
+            "US" -> listOf(" (USA)", " (Europe)", " (World)", "")
+            "EN" -> listOf(" (Europe)", " (USA)", " (World)", "")
+            "JA" -> listOf(" (Japan)", " (USA)", "")
+            "KO" -> listOf(" (Korea)", " (USA)", "")
+            "ZH" -> listOf(" (Taiwan)", " (Hong Kong)", " (China)", " (USA)", "")
+            else -> listOf(" (USA)", " (Europe)", " (Japan)", "")
+        }
+        for (tag in libretroTags) {
+            val libretroName = sanitizeForLibretro(name, tag)
+            fallbacks.add("https://raw.githubusercontent.com/libretro-thumbnails/$platformRepo/master/Named_Boxarts/$libretroName.png")
+            if (platformRepo != "Nintendo_-_Nintendo_3DS") {
+                fallbacks.add("https://raw.githubusercontent.com/libretro-thumbnails/Nintendo_-_Nintendo_3DS/master/Named_Boxarts/$libretroName.png")
+            }
         }
 
         return ArtworkInfo(
@@ -68,11 +95,31 @@ object ArtworkResolver {
             highResCoverUrl = hqGameTdb,
             fullCoverWrapUrl = fullCoverGameTdb,
             box3dUrl = box3dGameTdb,
-            fallbackUrls = fallbacks,
+            fallbackUrls = fallbacks.distinct(),
             source = if (gameId != null) "GameTDB" else "Libretro"
         )
     }
 
+    private fun sanitizeForLibretro(name: String, regionTag: String): String {
+        val cleanBaseName = name.replace(Regex("™|®|©"), "")
+            .replace(Regex("(?i)\\s*\\(usa\\)"), "")
+            .replace(Regex("(?i)\\s*\\(europe\\)"), "")
+            .replace(Regex("(?i)\\s*\\(japan\\)"), "")
+            .trim()
+
+        val cleanName = (cleanBaseName + regionTag)
+            .replace("&", "_")
+            .replace(":", "_")
+            .replace("/", "_")
+            .replace("\\", "_")
+            .replace("*", "_")
+            .replace("?", "_")
+            .replace("\"", "_")
+            .replace("<", "_")
+            .replace(">", "_")
+            .replace("|", "_")
+        return URLEncoder.encode(cleanName, StandardCharsets.UTF_8.toString()).replace("+", "%20")
+    }
     /**
      * Extracts the 4-letter Game ID from a 3DS Product Code.
      * e.g., CTR-P-AMKJ -> AMKJ, CTR-N-RA5E -> RA5E, KTR-N-UADJ -> UADJ
@@ -159,32 +206,5 @@ object ArtworkResolver {
             else ->
                 "Nintendo_-_Nintendo_3DS"
         }
-    }
-
-    private fun sanitizeForLibretro(name: String, subcategorySlug: String): String {
-        val cleanBaseName = name.replace(Regex("™|®|©"), "").trim()
-        val regionTag = when (subcategorySlug.lowercase()) {
-            "north-america", "usa", "us" -> " (USA)"
-            "europe" -> " (Europe)"
-            "japan", "jp" -> " (Japan)"
-            "germany" -> " (Germany)"
-            "france" -> " (France)"
-            "spain" -> " (Spain)"
-            "italy" -> " (Italy)"
-            "world" -> " (World)"
-            else -> ""
-        }
-        val cleanName = (cleanBaseName + regionTag)
-            .replace("&", "_")
-            .replace(":", "_")
-            .replace("/", "_")
-            .replace("\\", "_")
-            .replace("*", "_")
-            .replace("?", "_")
-            .replace("\"", "_")
-            .replace("<", "_")
-            .replace(">", "_")
-            .replace("|", "_")
-        return URLEncoder.encode(cleanName, StandardCharsets.UTF_8.toString()).replace("+", "%20")
     }
 }

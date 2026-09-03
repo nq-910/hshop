@@ -56,6 +56,8 @@ fun TopScreenContent(
     val downloadTasks by viewModel.downloadTasks.collectAsState()
     val outOfStorageTitleName by viewModel.outOfStorageTitleName.collectAsState()
     val isSynopsisModalOpen by viewModel.isSynopsisModalOpen.collectAsState()
+    val selectedTab by viewModel.selectedTab.collectAsState()
+    val selectedLocalRom by viewModel.selectedLocalRom.collectAsState()
 
     val currentTask = selectedDetail?.let { detail ->
         downloadTasks.find { it.id == detail.id }
@@ -88,7 +90,10 @@ fun TopScreenContent(
     }
 
     var showDeleteConfirm by remember { mutableStateOf(false) }
-    val activeRomFile = existingZcci ?: existingCci ?: existing3ds ?: existingCia ?: currentTask?.convertedFilePath?.let { File(it).takeIf { f -> f.exists() } } ?: currentTask?.targetFilePath?.let { File(it).takeIf { f -> f.exists() } }
+    val activeRomFile = (if (selectedTab == BottomTab.LIBRARY) selectedLocalRom?.file else null)
+        ?: existingZcci ?: existingCci ?: existing3ds ?: existingCia 
+        ?: currentTask?.convertedFilePath?.let { File(it).takeIf { f -> f.exists() } } 
+        ?: currentTask?.targetFilePath?.let { File(it).takeIf { f -> f.exists() } }
 
     if (showDeleteConfirm && activeRomFile != null && selectedDetail != null) {
         AlertDialog(
@@ -127,8 +132,6 @@ fun TopScreenContent(
             onDismiss = { viewModel.dismissOutOfStorageDialog() }
         )
     }
-
-    val selectedTab by viewModel.selectedTab.collectAsState()
 
     Box(
         modifier = modifier
@@ -284,27 +287,33 @@ private fun DetailView(
                     .border(1.dp, MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp))
             ) {
                 val context = LocalContext.current
-                val thumbUrl = detail.artwork?.thumbnailCoverUrl
-                    ?: detail.artwork?.primaryCoverUrl
-                val coverUrl = detail.artwork?.highResCoverUrl
-                    ?: detail.artwork?.primaryCoverUrl
-                    ?: detail.artwork?.box3dUrl
-                    ?: detail.artwork?.fallbackUrls?.firstOrNull()
+                val candidateUrls = remember(detail) {
+                    val list = mutableListOf<String>()
+                    detail.artwork?.highResCoverUrl?.let { list.add(it) }
+                    detail.artwork?.primaryCoverUrl?.let { if (!list.contains(it)) list.add(it) }
+                    detail.artwork?.box3dUrl?.let { if (!list.contains(it)) list.add(it) }
+                    detail.artwork?.fallbackUrls?.forEach { if (!list.contains(it)) list.add(it) }
+                    list
+                }
+                var activeUrlIndex by remember(detail.id) { mutableIntStateOf(0) }
+                val activeUrl = candidateUrls.getOrNull(activeUrlIndex)
 
-                val imageRequest = remember(coverUrl, thumbUrl) {
-                    val builder = ImageRequest.Builder(context)
-                        .data(coverUrl)
+                val imageRequest = remember(activeUrl) {
+                    ImageRequest.Builder(context)
+                        .data(activeUrl)
                         .crossfade(true)
-                    if (!thumbUrl.isNullOrBlank() && thumbUrl != coverUrl) {
-                        builder.placeholderMemoryCacheKey(thumbUrl)
-                    }
-                    builder.build()
+                        .build()
                 }
 
                 AsyncImage(
                     model = imageRequest,
                     contentDescription = detail.name,
                     contentScale = ContentScale.Fit,
+                    onError = {
+                        if (activeUrlIndex < candidateUrls.size - 1) {
+                            activeUrlIndex++
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(8.dp)
@@ -427,7 +436,7 @@ private fun DetailView(
                     }
                 }
             } else if (activeRomFile != null) {
-                val isDecrypted = existingZcci != null || existingCci != null || existing3ds != null || (currentTask?.convertedFilePath != null && currentTask.status == DownloadStatus.COMPLETED)
+                val isDecrypted = activeRomFile.extension.lowercase() in listOf("cci", "zcci", "3ds") || existingZcci != null || existingCci != null || existing3ds != null || (currentTask?.convertedFilePath != null && currentTask.status == DownloadStatus.COMPLETED)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
