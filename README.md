@@ -46,6 +46,10 @@ Browse, download, decrypt, compress, and launch Nintendo 3DS titles directly fro
 - **Predictive Artwork Pre-fetching & LRU Metadata**: Coil 256MB disk cache + bounded 300-entry LRU title cache ensures instantaneous (0ms) browsing and reloading with zero memory leaks.
 - **One-Tap Cache Wiping**: In-app Storage & Cache Management card in Settings displays live internal/ROM drive space and allows one-tap cache clearing.
 
+### 📚 Pre-Indexed Offline Database & 4,292 CDN Box Covers
+- **4,815 Pre-Indexed Titles**: Zero-latency offline querying via bundled `gametdb.db` (~4.28 MB) with **4,244 storylines/synopses** (88.1% coverage) and **1,976 genres** enriched via GameTDB, 3DS Releases, and Play-Asia.
+- **4,292 High-Res WebP Covers**: Powered by the companion [thor-3ds-db](https://github.com/nq-910/thor-3ds-db) repository on global jsDelivr CDN with regional GameTDB fallbacks.
+
 ### 🚀 Direct Emulator Launch & Seamless Handoff
 - Supports **AzaharPlus**
 - Uses Android `FileProvider` with automatic `Presentation` display release, ensuring the secondary screen is cleanly handed over to the emulator during gameplay.
