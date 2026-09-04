@@ -82,7 +82,7 @@ Grab the latest pre-compiled APK from the [**GitHub Releases**](https://github.c
 - **Direct Install**: Download the `.apk` directly onto your AYN Thor and open it with any file manager.
 - **Via ADB (PC / Mac / Linux)**:
   ```bash
-  adb install -r hshop-thor-v0.0.3-beta.apk
+  adb install -r hshop-thor-v0.0.4-beta.apk
   # Or install whichever version was downloaded:
   # adb install -r hshop-thor-*.apk
   ```

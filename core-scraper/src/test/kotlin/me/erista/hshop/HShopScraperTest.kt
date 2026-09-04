@@ -35,8 +35,9 @@ class HShopScraperTest {
             subcategorySlug = "north-america"
         )
         assertNotNull(artwork.primaryCoverUrl)
-        assertEquals("https://art.gametdb.com/3ds/cover/US/AMKE.jpg", artwork.primaryCoverUrl)
-        assertEquals("https://art.gametdb.com/3ds/coverHQ/US/AMKE.jpg", artwork.highResCoverUrl)
+        assertEquals("https://cdn.jsdelivr.net/gh/nq-910/thor-3ds-db@main/covers/AMKE.webp", artwork.primaryCoverUrl)
+        assertEquals("https://cdn.jsdelivr.net/gh/nq-910/thor-3ds-db@main/covers/AMKE.webp", artwork.highResCoverUrl)
+        assertTrue(artwork.fallbackUrls.contains("https://art.gametdb.com/3ds/cover/US/AMKE.jpg"))
     }
 
     @Test

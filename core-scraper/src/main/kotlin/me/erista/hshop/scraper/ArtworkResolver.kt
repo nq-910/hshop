@@ -36,6 +36,9 @@ object ArtworkResolver {
         val gameId = overrideGameId ?: extractGameId(productCode) ?: extractGameId(name)
         val regionCode = normalizeGameTdbRegion(overrideRegion) ?: inferGameTDBRegion(productCode, subcategorySlug)
         val isPhysicalCartridge = productCode.startsWith("CTR-P-", ignoreCase = true)
+        val cdnWebpUrl = if (gameId != null) {
+            "https://cdn.jsdelivr.net/gh/nq-910/thor-3ds-db@main/covers/$gameId.webp"
+        } else null
 
         val primaryGameTdb = if (gameId != null) {
             "https://art.gametdb.com/3ds/cover/$regionCode/$gameId.jpg"
@@ -61,8 +64,13 @@ object ArtworkResolver {
         // Generate fallbacks for alternative regions (US / EN / JA) and Libretro
         val fallbacks = mutableListOf<String>()
         if (gameId != null) {
-            // High-speed CDN mirror from thor-3ds-db WebP archive
-            fallbacks.add("https://cdn.jsdelivr.net/gh/nq-910/thor-3ds-db@main/covers/$gameId.webp")
+            // Secondary fallbacks to GameTDB regional and HQ scans
+            if (primaryGameTdb != null) {
+                fallbacks.add(primaryGameTdb)
+            }
+            if (hqGameTdb != null) {
+                fallbacks.add(hqGameTdb)
+            }
 
             val altRegions = listOf("US", "EN", "JA", "KO").filter { it != regionCode }
             for (alt in altRegions) {
@@ -89,14 +97,16 @@ object ArtworkResolver {
             }
         }
 
+        val primaryCover = cdnWebpUrl ?: primaryGameTdb ?: fallbacks.firstOrNull()
+
         return ArtworkInfo(
-            primaryCoverUrl = primaryGameTdb ?: fallbacks.firstOrNull(),
-            thumbnailCoverUrl = thumbGameTdb,
-            highResCoverUrl = hqGameTdb,
+            primaryCoverUrl = primaryCover,
+            thumbnailCoverUrl = cdnWebpUrl ?: thumbGameTdb,
+            highResCoverUrl = cdnWebpUrl ?: hqGameTdb,
             fullCoverWrapUrl = fullCoverGameTdb,
             box3dUrl = box3dGameTdb,
-            fallbackUrls = fallbacks.distinct(),
-            source = if (gameId != null) "GameTDB" else "Libretro"
+            fallbackUrls = fallbacks.distinct().filter { it != primaryCover },
+            source = if (cdnWebpUrl != null) "ThorCDN" else if (gameId != null) "GameTDB" else "Libretro"
         )
     }
 
